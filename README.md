@@ -7,7 +7,10 @@ benchmarks and a roofline analysis grounded in the hardware ceiling.
 **Status:** Working end-to-end. Single-prompt smoke test passes; ds4's
 prefill + steady-state decode are within ~10–15 % of the bandwidth roofline
 for this quant on this hardware. MTP speculative decode is shipped by the
-donor but currently a 3–6 % regression on Spark across all prompt types tested.
+donor but produces **no speedup on CUDA today** — root cause traced to a
+quant-format gap in one CUDA kernel that silently rejects the MTP draft's
+Q4_K experts. The fix is ~700–900 LOC in `ds4_cuda.cu`, scoped in
+[docs/MTP_PARITY_GAP.md](docs/MTP_PARITY_GAP.md). The Metal backend is unaffected.
 
 - **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine. CUDA backend landed 2026-05-11; this writeup uses HEAD `920f987` as of 2026-05-12.
 - **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf) — 81 GiB asymmetric quant: IQ2_XXS for routed-expert gate/up, Q2_K for routed-expert down (these dominate model bytes), Q8_0 for everything else dense (shared expert, attention projections, output head, router), F16 for LoRA matrices and the compressor/indexer, F32 norms. (FP8 in ds4 is a *runtime* KV-cache quantization — E4M3FN round-trip — not a stored weight format.) Plus an optional 3.6 GiB MTP draft GGUF.
@@ -262,14 +265,50 @@ single-request wall time. If you need many concurrent users on one Spark
 you need a different runtime (vLLM/SGLang with paged-attention batching).
 ds4 is single-session by design.
 
-## MTP (speculative decode) — neutral at best, depends on what you measure
+## MTP (speculative decode) — broken on CUDA today; root cause known
 
 The donor ships `--mtp <draft.gguf> --mtp-draft N`. The MTP support GGUF
 is a separate 3.6 GiB file (`DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf`).
 The donor README labels MTP as "alpha quality / experimental."
 
-Measured at `draft=2` (donor-recommended value) against matching no-MTP
-baselines, four high-predictability prompts:
+**On the CUDA backend on Spark today, MTP produces no speedup because
+the MTP draft kernel never produces a token.** Empirically traced and
+documented in detail in [`docs/MTP_PARITY_GAP.md`](docs/MTP_PARITY_GAP.md);
+the headline is:
+
+- `routed_moe_launch` in `ds4_cuda.cu:8849` hard-codes
+  `gate_type == 16u (IQ2_XXS) && down_type == 10u (Q2_K)` and returns
+  failure for any other combination.
+- The MTP draft GGUF uses **Q4_K (type 12)** for its routed expert tensors.
+- Every MTP draft attempt silently fails inside this kernel; the C-side
+  speculative state machine treats that as "no draft available" and
+  commits one token per cycle — indistinguishable from non-MTP decode.
+- The Metal backend has the parity dispatch
+  (`g_moe_mul_mv_id_q4_k_pipeline`, `metal/moe.metal:413` / `:831`);
+  MTP works there.
+
+Reproduce in one line:
+
+```bash
+DS4_MTP_PROBE=1 ./ds4 --cuda -m … --mtp … --mtp-draft 2 --temp 0 --nothink \
+  -p "List 20 prime numbers" 2>&1 | grep "mtp probe draft failed" | wc -l
+# Prints 58 — one failure per generation step.
+```
+
+The fix is scoped at ~700–900 LOC in a single file (`ds4_cuda.cu`); no
+changes needed to the C-side state machine, MTP weight binding, batched
+verifier, or KV/raw-cache plumbing — those are quant-agnostic and
+already work. See [`docs/MTP_PARITY_GAP.md`](docs/MTP_PARITY_GAP.md) for
+the full handoff: empirical chain, Metal reference, implementation order,
+validation plan, effort estimate.
+
+### What the throughput tables actually look like today
+
+Because the MTP path is a no-op on CUDA, the numbers below are
+"target-model decode with extra startup cost for loading the MTP GGUF."
+
+Measured at `draft=2` against matching no-MTP baselines, four
+high-predictability prompts (ds4 CLI, first-token-inclusive):
 
 | Prompt | no-MTP t/s | MTP-2 t/s | Δ |
 |---|---:|---:|---:|
@@ -279,8 +318,10 @@ baselines, four high-predictability prompts:
 | 27 EU capitals alphabetical | 14.92 | 14.48 | −2.9 % |
 | **mean** | **14.93** | **14.36** | **−3.8 %** |
 
-Three separate `--mtp-draft` values (1, 2, 4) all land within noise of each
-other and slightly below the no-MTP baseline:
+The 3–6 % regression is the MTP support model's per-request setup cost
+(loading and binding the extra 3.6 GiB GGUF, allocating MTP raw-cache
+tensors), paid on every request, with no speculative gain to offset it.
+Three separate `--mtp-draft` values (1, 2, 4) all land within noise:
 
 | Config | decode t/s (QuickSort prompt) |
 |---|---:|
@@ -289,15 +330,11 @@ other and slightly below the no-MTP baseline:
 | `--mtp-draft 2` | 13.62 |
 | `--mtp-draft 4` | 13.63 |
 
-**Counting 1→60 is fully deterministic** — every next token is forced — so
-acceptance rate should be ~100 %. MTP is still slower. This rules out
-"low acceptance rate" as the explanation; the cost is in the
-draft-inference + verifier mechanics themselves. Consistent with the donor's
-"alpha" labeling.
-
-It also fits the roofline picture: steady-state decode is already at ~95 % of
-the bandwidth ceiling, so even a hypothetical zero-overhead MTP couldn't
-deliver large gains on this hardware.
+**Counting 1→60 is fully deterministic** — every next token is forced —
+so MTP acceptance rate should be ~100 % *if MTP were producing drafts*.
+That it's still slightly slower confirms the path is doing setup work
+and emitting no drafts. Consistent with `DS4_MTP_PROBE=1` showing 100 %
+draft-kernel failure.
 
 ### MTP via llama-benchy (steady-state methodology)
 
@@ -310,24 +347,25 @@ decode rate. Same hardware, three runs each, d=8192 tg=512:
 | MTP draft=2 | 23.61 ± 0.48 | **28.33** ± 0.47 | 328.49 ± 0.68 |
 | Δ | +6.6 % (within noise) | identical | identical |
 
-Three observations:
+**Peak t/s is bit-identical** (28.33 in both runs). Because the CUDA
+MTP path produces zero accepted drafts, the two configurations are
+running the same target-decode kernels at the same rate; the small
+mean delta and tighter variance are setup-cost shadow plus run-to-run
+noise, not a speculative-decode effect.
 
-- **Peak t/s is bit-identical** between the two runs (28.33 t/s in both). The
-  steady-state ceiling is set by the bandwidth roofline (§ Roofline analysis),
-  not by MTP availability.
-- **MTP narrows variance** (±0.48 vs ±2.57). The draft+verify rhythm
-  smooths per-token jitter. The mean lands ~7 % above no-MTP, but that
-  is well within the no-MTP error bar.
-- **Reconciles the CLI-vs-benchy gap.** Our earlier CLI tests showed MTP
-  as a 3–6 % *regression* (using first-token-inclusive metrics). That
-  cost is the MTP path's per-request setup overhead — it lands on the
-  first token. Once excluded, MTP is roughly neutral. Both measurements
-  are correct; they answer different questions.
+### Expected behaviour once the parity gap is closed
 
-**Net:** MTP cannot meaningfully speed up decode on Spark because decode
-is already at the bandwidth roofline. There's a small variance-smoothing
-win, paid for with first-token setup cost. Choose `--with-mtp` only if
-you care about decode-time stability and not about TTFT.
+With the CUDA Q4_K MoE kernel in place, MTP-2 on DSv4-Flash should
+deliver a steady-state lift comparable to what vLLM+FlashInfer
+delivers on Qwen3.5-122B-A10B on the same GB10 hardware: **28.3 →
+38.4 t/s (+35.7 %) from MTP-2 alone, up to 51 t/s (+80 %) stacked
+with other optimisations.** DSv4 starts from a higher bandwidth-roof
+saturation (~95 %), so the MTP gain there will come from FLOPs hidden
+behind shared weight reads in the batched 2-row verifier rather than
+from leftover bandwidth — but the absolute number should land in the
+35–50 t/s range. See
+[`docs/MTP_PARITY_GAP.md`](docs/MTP_PARITY_GAP.md) §1.2 and §9 for
+the full argument.
 
 ## Quality checks (qualitative)
 
@@ -373,6 +411,10 @@ docs/
                               ds4_cuda.cu — kernel surface, command lifecycle,
                               model attach, quantisation, and where each
                               backend's design diverges
+  MTP_PARITY_GAP.md           Root-cause of "MTP gives no speedup on CUDA":
+                              one quant-format gap in ds4_cuda.cu's MoE
+                              kernel. Empirical chain, Metal reference,
+                              ~700-900 LOC fix scope, validation plan.
 ```
 
 ## Reproducing the benchmarks

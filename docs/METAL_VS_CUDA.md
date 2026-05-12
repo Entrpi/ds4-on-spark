@@ -17,7 +17,7 @@ ds4_gpu.h defines what both backends owe the engine:
 - One opaque `ds4_gpu_tensor` type with alloc / view / free / host-pointer accessor / write / read / device-copy.
 - A four-call command lifecycle: `begin_commands → (dispatches) → flush_commands → end_commands`, plus `synchronize` for ad-hoc waits.
 - Model attach functions: `set_model_map(ptr, size)`, `set_model_map_range(...)`, `set_model_fd(fd)`, `cache_model_range(...)`, `cache_q8_f16_range(...)`.
-- A bank of kernel calls grouped by purpose: embedding/indexer, dense matmul (Q8_0 / F16 / F32 / pair-output), MoE (router + per-expert matmul with IQ2_XXS / Q2_K / Q4_K paths), RoPE tail-only, RMS norm, flash attention, DSV4-specific HC split/expand/mix, KV FP8 round/store, compressor store, ratio-4 shift, directional steering, softmax/argsort/unary, get/set rows, etc.
+- A bank of kernel calls grouped by purpose: embedding/indexer, dense matmul (Q8_0 / F16 / F32 / pair-output), MoE (router + per-expert matmul), RoPE tail-only, RMS norm, flash attention, DSV4-specific HC split/expand/mix, KV FP8 round/store, compressor store, ratio-4 shift, directional steering, softmax/argsort/unary, get/set rows, etc. (For routed-expert quant coverage the two backends are **not** at parity today — Metal accepts Q8_0 / Q2_K / Q4_K / IQ2_XXS, CUDA accepts only IQ2_XXS+Q2_K. This is what breaks MTP on CUDA; see §8 and [`MTP_PARITY_GAP.md`](MTP_PARITY_GAP.md).)
 - `print_memory_report(label)` and `set_quality(bool)`.
 
 Different platforms; same surface area. Beneath that, the implementation strategies diverge sharply.
@@ -151,7 +151,7 @@ CUDA has no equivalent of `BytesNoCopy` on a file mmap. The backend tries progre
 
 ## 5. Quantisation handling
 
-The model carries Q8_0 (most dense matmuls), F16 (LoRA projections), F32 (norms), and routed-expert quants IQ2_XXS / Q2_K / Q4_K. How each backend handles these is structurally different.
+The model carries Q8_0 (most dense matmuls), F16 (LoRA projections), F32 (norms), and routed-expert quants IQ2_XXS / Q2_K / Q4_K. How each backend handles these is structurally different — and the two backends do **not** cover the same set of routed-expert quants today (see §8).
 
 ### Metal: always inline dequant in the kernel
 
@@ -185,7 +185,18 @@ So the same Q8 weight tensor becomes:
 - **Metal**: read from mmap, dequantised in registers, used once, never materialised in F16.
 - **CUDA**: read from mmap (or registered host memory), dequantised once into a device F16 buffer that lives for the rest of the process, used by cuBLAS Hgemm thereafter.
 
-For the **routed experts** (IQ2_XXS / Q2_K / Q4_K) — which dominate the model's memory footprint — both backends keep them quantised and dequant inline. Pre-converting all 256 experts to F16 would defeat the purpose of having a 2-bit model.
+For the **routed experts** — which dominate the model's memory footprint — both backends keep weights quantised and dequant inline. Pre-converting all 256 experts to F16 would defeat the purpose of having a 2-bit model.
+
+The **set of routed-expert quants each backend can consume diverges** today:
+
+|  | Metal | CUDA |
+|---|---|---|
+| IQ2_XXS routed | ✓ | ✓ |
+| Q2_K routed | ✓ | ✓ |
+| Q4_K routed | ✓ (`metal/moe.metal:413` + `:831`) | ✗ (`ds4_cuda.cu:8849` returns failure) |
+| Q8_0 routed | ✓ | (unused; falls through) |
+
+This is why MTP doesn't work on CUDA today: the MTP support GGUF stores its routed experts in Q4_K, the Metal pipeline accepts that, the CUDA pipeline does not, and the C-side speculative state machine treats the kernel-level failure as "no draft available." Closing this gap is a single-file ~700–900 LOC change; the scope is laid out in [`MTP_PARITY_GAP.md`](MTP_PARITY_GAP.md).
 
 ---
 
@@ -253,12 +264,17 @@ Both backends share the high-level scheme: a router selects 6 experts per token 
 |---|---|---|
 | Router | `kernel_dsv4_router_select_*` family (metal/dsv4_misc.metal) | `router_select_kernel` (ds4_cuda.cu:3903) + `_warp_topk_kernel` (ds4_cuda.cu:4017) + `_parallel_kernel` (ds4_cuda.cu:3955) |
 | Expert dispatch geometry | One simdgroup per (token, slot), expert index read from router output | One block per (token, slot, output row) — `moe_gate_up_mid_kernel` (ds4_cuda.cu:7137), `_warp8_kernel` (ds4_cuda.cu:7196) |
+| Quant types accepted by the MoE matvec | Q8_0 / Q2_K / Q4_K / IQ2_XXS (dispatched at `ds4_metal.m:11580`, kernels in `metal/moe.metal` lines 321/413/522 etc.) | **IQ2_XXS+Q2_K only** — hard-coded at `ds4_cuda.cu:8849`: `if (gate_type != 16u \|\| down_type != 10u) return 0;`. Any other combination (notably Q4_K) returns failure. |
 | IQ2_XXS dequant | Inline in the expert matvec; codebook in `constant` address space | Inline; codebook in `__constant__` memory via `dev_dot_iq2_xxs_q8_K_block_lut()` (ds4_cuda.cu:6722-6776) |
 | Output reduction | Per-token accumulation in scratch | Atomic-add (`DS4_CUDA_MOE_ATOMIC_DOWN`) or non-atomic (`DS4_CUDA_MOE_NO_ATOMIC_DOWN`) — runtime-selectable |
-| SwiGLU + weight fusion | `kernel_dsv4_moe_swiglu_weight` + `_f16` variants (metal/moe.metal:129-199) | Inlined into the gate/up/mid kernel |
-| Tuning knobs | Function constants on the kernels | `DS4_CUDA_MOE_GATE_ROW`, `_MOE_NO_GATE_ROW`, `_MOE_ATOMIC_DOWN`, `_MOE_NO_ATOMIC_DOWN`, `_MOE_PROFILE` |
+| SwiGLU + weight fusion | `kernel_dsv4_moe_swiglu_weight` + `_f16` variants (metal/moe.metal:129-199); IQ2_XXS additionally fuses gate+up+SwiGLU in one kernel (`kernel_mul_mv_iq2_xxs_pair_swiglu_f32`, `metal/moe.metal:959`) | Inlined into the gate/up/mid kernel for the IQ2_XXS+Q2_K path |
+| Tuning knobs | Function constants on the kernels | `DS4_CUDA_MOE_GATE_ROW`, `_MOE_NO_GATE_ROW`, `_MOE_ATOMIC_DOWN`, `_MOE_NO_ATOMIC_DOWN`, `_MOE_PROFILE` (all on the IQ2_XXS+Q2_K fast path) |
 
 Both implementations keep routed experts quantised throughout (no F16 pre-conversion). This is the choice that makes 2-bit ds4 useful: the experts are ~80% of the model bytes and converting them would erase the q2 win.
+
+**The "Q4_K-only on Metal" row is what breaks MTP on CUDA today.** The MTP support GGUF stores its routed experts in Q4_K (the main model uses IQ2_XXS+Q2_K). When the speculative decode state machine calls into the MoE kernel for the MTP block's routed experts on CUDA, the quant-type check rejects the call and returns failure. The C-side state machine treats that as "no draft available" and silently falls back to one-token decode — which is why MTP "looks alpha" externally even though the C-side machinery is sound. Metal hits exactly the same code path with `gate_type=Q4_K, down_type=Q4_K`, dispatches to `g_moe_mul_mv_id_q4_k_pipeline`, and MTP works.
+
+The fix is to add the missing Q4_K dispatch case to `routed_moe_launch` in `ds4_cuda.cu`. Scope, validation plan, and Metal-reference pointers are in [`MTP_PARITY_GAP.md`](MTP_PARITY_GAP.md). It's the highest-leverage CUDA-side contribution to the project today.
 
 ---
 
@@ -381,6 +397,7 @@ The shape of the knobs maps onto the shape of the backend: Metal exposes residen
 2. **Hot-swap kernel sources** via `DS4_METAL_*_SOURCE` env vars without recompiling — useful for kernel-level diagnostics on a running deploy.
 3. **Single-binary GPU portability** — one Metal binary runs on M1, M3, M4 without recompilation.
 4. **Detailed per-subsystem scratch reporting** that's actually useful for diagnosing memory pressure on a unified memory system.
+5. **Full routed-expert quant coverage in the MoE matvec.** Metal accepts IQ2_XXS / Q2_K / Q4_K / Q8_0; CUDA accepts only IQ2_XXS+Q2_K (`ds4_cuda.cu:8849`). This is the difference that makes MTP work on Metal and silently no-op on CUDA — see §8 and [`MTP_PARITY_GAP.md`](MTP_PARITY_GAP.md).
 
 ### Things CUDA does that Metal cannot
 
@@ -392,7 +409,7 @@ The shape of the knobs maps onto the shape of the backend: Metal exposes residen
 ### Things both do the same way
 
 - The high-level inference graph is identical: 43 layers, HC=4 streams, ratio-4 with indexer alternating with ratio-128, raw 128-token sliding window, MLA-style attention, 256-expert MoE with top-6 routing, tail-only RoPE with YaRN scaling, FP8 E4M3FN KV round-trip.
-- Routed experts stay quantised in both — IQ2_XXS / Q2_K / Q4_K are dequantised inline at use time on both backends.
+- Routed experts stay quantised in both — IQ2_XXS / Q2_K are dequantised inline at use time on both backends (and Metal additionally handles Q4_K inline, which CUDA does not today — see §8).
 - Single-worker, single-session execution. No batching across requests on either side.
 - Quality-vs-speed flag (`--quality`) flips both `DS4_CUDA_NO_TF32` and Metal's quality flag; same intent, different impact.
 - Both reach the same logprob test vectors within the tolerance defined in `tests/ds4_test.c`.
@@ -414,4 +431,4 @@ If you want to ground this comparison in code, the most efficient path is:
 
 ## 16. Summary in one paragraph
 
-The Metal backend leans on the fact that an Apple Silicon mmap *is* a GPU buffer: it wraps the GGUF file with overlapping `MTLBuffer` views, requests residency on macOS 15+, dequantises Q8 inline at every matvec, batches kernel dispatches inside one explicit command buffer, and parametrises kernel variants through Metal function constants — one source per file, many specialisations, swappable at runtime via env vars. The CUDA backend assumes a discrete-or-bus-attached GPU where the model has to cross some boundary: it tries `cudaHostRegister` first, falls back to per-range pinning or 64 MiB-chunked `cudaMemcpy`, and aggressively pre-converts Q8 weights to F16 in a one-time device-side dequant pass so that `cublasGemmEx` can run prefill matmuls on tensor cores. Both backends share the same DSV4-specific kernels (HC mixer, tail RoPE, FP8 KV, ratio-4 indexer, compressor, directional steering, MoE with IQ2_XXS experts) and ultimately match the official DeepSeek API's logits within the project's test tolerance — but the routes they take to get there reflect their hardware: one path optimises for unified memory and runtime flexibility; the other optimises for bus crossings and tensor-core throughput.
+The Metal backend leans on the fact that an Apple Silicon mmap *is* a GPU buffer: it wraps the GGUF file with overlapping `MTLBuffer` views, requests residency on macOS 15+, dequantises Q8 inline at every matvec, batches kernel dispatches inside one explicit command buffer, and parametrises kernel variants through Metal function constants — one source per file, many specialisations, swappable at runtime via env vars. The CUDA backend assumes a discrete-or-bus-attached GPU where the model has to cross some boundary: it tries `cudaHostRegister` first, falls back to per-range pinning or 64 MiB-chunked `cudaMemcpy`, and aggressively pre-converts Q8 weights to F16 in a one-time device-side dequant pass so that `cublasGemmEx` can run prefill matmuls on tensor cores. Both backends share the same DSV4-specific kernels (HC mixer, tail RoPE, FP8 KV, ratio-4 indexer, compressor, directional steering, MoE with IQ2_XXS+Q2_K routed experts) and ultimately match the official DeepSeek API's logits within the project's test tolerance — but the routes they take to get there reflect their hardware: one path optimises for unified memory and runtime flexibility; the other optimises for bus crossings and tensor-core throughput. One area where they have **not** yet converged is the set of routed-expert quants the MoE matvec accepts: Metal handles Q4_K, CUDA does not, and that single gap is what currently breaks MTP speculative decode on CUDA ([`MTP_PARITY_GAP.md`](MTP_PARITY_GAP.md)).
