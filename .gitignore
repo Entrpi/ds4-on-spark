@@ -1,0 +1,19 @@
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+
+# Build artifacts
+*.o
+*.so
+/build/
+/bw_bench
+
+# Local data
+/local/
+/results/local/
+*.log
