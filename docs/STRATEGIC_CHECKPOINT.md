@@ -6,6 +6,11 @@ considering writing their own port, fork, or wrapper for DSv4-Flash on
 DGX Spark — and wants the empirical answer to "is the donor good enough?"
 before committing to that work.
 
+Paired companion: [`METAL_VS_CUDA.md`](METAL_VS_CUDA.md) covers the implementation
+side — how the CUDA backend actually realises the same `ds4_gpu.h` contract that
+the Metal backend does, kernel by kernel. This document is the *what*; that one
+is the *why*.
+
 **One-line answer:** Yes. The donor's native CUDA path on Spark is
 at ~95 % of the memory-bandwidth roofline at steady state. There is
 no easy 2–4× decode speedup left on the table for this quant + this
@@ -33,8 +38,18 @@ landed a 9,666-LOC `ds4_cuda.cu` (106 kernels) behind a unified
 
 This made it possible to run DSv4-Flash on a Spark via the donor's own
 runtime, without a port, without a wrapper, and without patching CUDA
-dispatch. The build knob `CUDA_ARCH=sm_121` is GB10-correct out of
-the box.
+dispatch. The `Makefile` defaults `CUDA_ARCH` to `native` and accepts any
+`sm_NNN` override; `make CUDA_ARCH=sm_121` is GB10-correct out of the box.
+
+At the implementation level the CUDA path links `-lcudart -lcublas`, uses
+`cudaMallocManaged` for runtime tensors, mounts the 80 GiB GGUF via a
+three-tier strategy (host-register → per-range pinning → 64 MiB chunked
+`cudaMemcpy`), and pre-converts dense `Q8_0` weights into a device-side
+`F16` cache so `cublasGemmEx` can run prefill matmuls on tensor cores. Routed
+expert weights (IQ2_XXS / Q2_K) are *not* pre-converted; they stay quantised
+and are dequantised inline in hand-written kernels. The full breakdown,
+including the differences from the Metal backend, lives in
+[`METAL_VS_CUDA.md`](METAL_VS_CUDA.md).
 
 The donor's README still labels the project "alpha quality" overall;
 the MTP path is specifically called out as experimental.
@@ -123,8 +138,18 @@ The always-active path (~9 GB nominal) plus the active expert slice
 ```
 
 This is below the 11 GB static estimate — meaning some weights cache-hit
-across layers, or fused kernels avoid re-reading. Either way, the donor's
-kernels are tighter than naïve bucketing predicts.
+across layers, or fused kernels avoid re-reading, or both. Either way, the
+donor's kernels are tighter than naïve bucketing predicts.
+
+One thing worth noting up front: the decode roofline is read in the *stored*
+quantisation, not the cached F16 copy. The donor pre-converts dense `Q8_0`
+weights to an F16 cache at startup so cuBLAS can use tensor cores for
+prefill (multi-token) GEMM — but the decode path (`n_tok=1`) skips that
+cache and goes through hand-written Q8_0 matvecs where the stored bytes are
+what gets read. See [`METAL_VS_CUDA.md`](METAL_VS_CUDA.md) §5 for the full
+prefill-vs-decode dispatch logic. The 300–360 t/s prefill rate and ~28 t/s
+decode rate are taking different routes through the matmul stack on the
+same model in the same process.
 
 ## 5. Roofline
 
@@ -246,7 +271,7 @@ is decode-rate stability, at the cost of a few hundred ms additional TTFT.
 | Serve many users on one Spark | **vLLM** (not ds4 — donor explicitly intentionally narrow) |
 | Host non-DSv4 models alongside | **vLLM or SGLang** — ds4 is DSv4-Flash-only by design |
 | Maximum decode throughput | Tighter quant or different hardware; not a software win available on Spark |
-| Custom serving / steering / experiments | ds4's `--dir-steering-*` flags expose direction-vector steering; or fork |
+| Custom serving / steering / experiments | ds4's `--dir-steering-*` flags expose direction-vector steering; or fork (see [`METAL_VS_CUDA.md`](METAL_VS_CUDA.md) for the implementation surface) |
 
 ## 8. When a separate port is the right answer
 
@@ -260,6 +285,10 @@ justified if and only if you need at least one of:
 3. **Strategic independence** from a single upstream.
 4. **Learning vehicle** — porting clarifies architecture in a way no
    consumer of a black-box server gets.
+
+Before committing to any of those, read [`METAL_VS_CUDA.md`](METAL_VS_CUDA.md).
+It defines the kernel surface, command lifecycle, and quantisation handling
+you would have to reimplement (or wrap) to match the donor's behaviour.
 
 The bad reasons to port:
 

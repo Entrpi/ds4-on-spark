@@ -9,9 +9,9 @@ prefill + steady-state decode are within ~10–15 % of the bandwidth roofline
 for this quant on this hardware. MTP speculative decode is shipped by the
 donor but currently a 3–6 % regression on Spark across all prompt types tested.
 
-- **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine. CUDA backend landed 2026-05-11; this writeup uses HEAD as of 2026-05-12.
-- **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf) — 81 GiB asymmetric 2-bit GGUF (IQ2_XXS gate/up, Q2_K down, FP8 elsewhere). Plus an optional 3.6 GiB MTP draft GGUF.
-- **Hardware:** NVIDIA DGX Spark, GB10, SM121, 128 GiB LPDDR5X unified. The donor's `Makefile` already exposes `CUDA_ARCH=sm_121` as a build knob, no patches needed.
+- **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine. CUDA backend landed 2026-05-11; this writeup uses HEAD `920f987` as of 2026-05-12.
+- **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf) — 81 GiB asymmetric quant: IQ2_XXS for routed-expert gate/up, Q2_K for routed-expert down (these dominate model bytes), Q8_0 for everything else dense (shared expert, attention projections, output head, router), F16 for LoRA matrices and the compressor/indexer, F32 norms. (FP8 in ds4 is a *runtime* KV-cache quantization — E4M3FN round-trip — not a stored weight format.) Plus an optional 3.6 GiB MTP draft GGUF.
+- **Hardware:** NVIDIA DGX Spark, GB10, SM121, 128 GiB LPDDR5X unified. The donor's `Makefile` defaults `CUDA_ARCH` to `native` and accepts any `sm_NNN` override, so `make CUDA_ARCH=sm_121` is GB10-correct with no patches needed.
 
 ## Quick start
 
@@ -204,6 +204,46 @@ The 13 t/s "perceived" number is **first-token latency**, not steady-state.
 That is a separately-tractable optimization target (warm-cache reuse from
 prior turns, persistent KV across thinking/answer phases, prefetch).
 
+## Under the hood: how the CUDA backend works
+
+A side-by-side analysis of ds4's two GPU backends —
+[**docs/METAL_VS_CUDA.md**](docs/METAL_VS_CUDA.md) — covers the kernel
+surface, the command lifecycle, and the model-attach strategy on each
+platform. TL;DR for someone running on Spark and asking *what is the
+implementation actually doing?*:
+
+- **`ds4_cuda.cu` is 9,666 LOC, 106 `__global__` kernels, links `-lcudart -lcublas`.**
+  All compiled ahead of time by `nvcc` for the target `CUDA_ARCH` — the binary
+  is not portable across SM generations.
+- **Three-tier model attach.** `cudaHostRegister(... cudaHostRegisterMapped | ReadOnly)`
+  on the mmap'd 80 GiB GGUF is tried first to get a zero-copy device pointer.
+  If pinning fails (or `DS4_CUDA_COPY_MODEL` is set), the engine falls back to
+  per-range pinning, then to chunked `cudaMalloc + cudaMemcpy` in 64 MiB chunks.
+  This is what the ~20 s cold load is.
+- **Q8 → F16 weight cache for prefill.** On startup, dense Q8_0 weights are
+  dequantised once on-device into an F16 buffer; `cublasGemmEx` then uses
+  tensor cores for multi-token prefill matmuls. That's why prefill is
+  ~300–360 t/s while decode is ~28 t/s — they take different routes through
+  the matmul stack. Decode (`n_tok=1`) skips cuBLAS and uses hand-written
+  Q8_0 matvecs where the cuBLAS launch overhead wouldn't amortize.
+- **Routed experts stay quantised.** IQ2_XXS / Q2_K kernels dequantise inline
+  on every expert dot; the codebook lives in `__constant__` memory via
+  `ds4_iq2_tables_cuda.inc`. Pre-converting all 256 experts to F16 would erase
+  the q2 memory win.
+- **Default stream, serial execution.** `begin_commands` is a no-op;
+  `flush_commands`, `end_commands`, and `synchronize` all reduce to
+  `cudaDeviceSynchronize()`. Two named streams (`g_model_prefetch_stream`,
+  `g_model_upload_stream`) exist only for async model staging at startup.
+  Combined with the engine's single-session worker thread, this is why
+  `ds4-server` serialises concurrent clients (see next section).
+- **No GDS / cuFile.** Direct file reads (via `ds4_gpu_set_model_fd`) use Linux
+  `O_DIRECT` on a registered FD — kernel DMA, not GPU-side DMA.
+
+If you're considering writing a port, fork, or alternative serving layer,
+the analysis doc lays out the kernel surface, the `DS4_CUDA_*` env-var knobs,
+and the places where the Metal and CUDA backends diverge structurally
+(model mapping, command-buffer batching, library use).
+
 ## Concurrency on `ds4-server` — single-stream, serialized
 
 The OpenAI v1 server **does not actually parallelize concurrent requests**.
@@ -329,6 +369,10 @@ bench/
 docs/
   STRATEGIC_CHECKPOINT.md     Detailed analysis of how this benchmark
                               affects the "should we keep porting?" decision
+  METAL_VS_CUDA.md            Side-by-side comparison of ds4_metal.m and
+                              ds4_cuda.cu — kernel surface, command lifecycle,
+                              model attach, quantisation, and where each
+                              backend's design diverges
 ```
 
 ## Reproducing the benchmarks
