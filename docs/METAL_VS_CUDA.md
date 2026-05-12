@@ -193,7 +193,7 @@ The **set of routed-expert quants each backend can consume diverges** today:
 |---|---|---|
 | IQ2_XXS routed | ✓ | ✓ |
 | Q2_K routed | ✓ | ✓ |
-| Q4_K routed | ✓ (`metal/moe.metal:413` + `:831`) | ✗ (`ds4_cuda.cu:8849` returns failure) |
+| Q4_K routed | ✓ — base (`metal/moe.metal:413` + `:831`), fused gate+up+SwiGLU (`:1160`), fused n_expert=6 down+sum (`:1336`) | ✗ (`ds4_cuda.cu:8849` returns failure) |
 | Q8_0 routed | ✓ | (unused; falls through) |
 
 This is why MTP doesn't work on CUDA today: the MTP support GGUF stores its routed experts in Q4_K, the Metal pipeline accepts that, the CUDA pipeline does not, and the C-side speculative state machine treats the kernel-level failure as "no draft available." Closing this gap is a single-file ~700–900 LOC change; the scope is laid out in [`MTP_PARITY_GAP.md`](MTP_PARITY_GAP.md).
@@ -267,7 +267,7 @@ Both backends share the high-level scheme: a router selects 6 experts per token 
 | Quant types accepted by the MoE matvec | Q8_0 / Q2_K / Q4_K / IQ2_XXS (dispatched at `ds4_metal.m:11580`, kernels in `metal/moe.metal` lines 321/413/522 etc.) | **IQ2_XXS+Q2_K only** — hard-coded at `ds4_cuda.cu:8849`: `if (gate_type != 16u \|\| down_type != 10u) return 0;`. Any other combination (notably Q4_K) returns failure. |
 | IQ2_XXS dequant | Inline in the expert matvec; codebook in `constant` address space | Inline; codebook in `__constant__` memory via `dev_dot_iq2_xxs_q8_K_block_lut()` (ds4_cuda.cu:6722-6776) |
 | Output reduction | Per-token accumulation in scratch | Atomic-add (`DS4_CUDA_MOE_ATOMIC_DOWN`) or non-atomic (`DS4_CUDA_MOE_NO_ATOMIC_DOWN`) — runtime-selectable |
-| SwiGLU + weight fusion | `kernel_dsv4_moe_swiglu_weight` + `_f16` variants (metal/moe.metal:129-199); IQ2_XXS additionally fuses gate+up+SwiGLU in one kernel (`kernel_mul_mv_iq2_xxs_pair_swiglu_f32`, `metal/moe.metal:959`) | Inlined into the gate/up/mid kernel for the IQ2_XXS+Q2_K path |
+| SwiGLU + weight fusion | `kernel_dsv4_moe_swiglu_weight` + `_f16` variants (metal/moe.metal:129-199); both IQ2_XXS and Q4_K additionally ship fused gate+up+SwiGLU kernels (`kernel_mul_mv_iq2_xxs_pair_swiglu_f32` at `metal/moe.metal:959`, `kernel_mul_mv_id_q4_K_pair_swiglu_f32` at `:1160`), and Q4_K also has a fused n_expert=6 down+sum (`kernel_mul_mv_id_q4_K_sum6_f32` at `:1336`) used by the MTP fast path | Inlined into the gate/up/mid kernel for the IQ2_XXS+Q2_K path; Q4_K not yet implemented |
 | Tuning knobs | Function constants on the kernels | `DS4_CUDA_MOE_GATE_ROW`, `_MOE_NO_GATE_ROW`, `_MOE_ATOMIC_DOWN`, `_MOE_NO_ATOMIC_DOWN`, `_MOE_PROFILE` (all on the IQ2_XXS+Q2_K fast path) |
 
 Both implementations keep routed experts quantised throughout (no F16 pre-conversion). This is the choice that makes 2-bit ds4 useful: the experts are ~80% of the model bytes and converting them would erase the q2 win.

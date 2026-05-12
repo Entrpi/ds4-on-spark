@@ -200,7 +200,7 @@ So Metal already has a full Q4_K MoE matvec pipeline, plus the dispatcher that p
 
 ## 4. The Metal reference — what parity looks like
 
-Metal already supports the full quant combination matrix the loader accepts. Pipelines used by routed MoE (`ds4_metal.m:11580`):
+Metal already supports the full quant combination matrix the loader accepts. Base pipelines used by routed MoE (`ds4_metal.m:11580`):
 
 | Quant type id | Constant | Metal pipeline |
 |---|---|---|
@@ -209,7 +209,15 @@ Metal already supports the full quant combination matrix the loader accepts. Pip
 | 12 (Q4_K) | `DS4_METAL_TENSOR_Q4_K` | `g_moe_mul_mv_id_q4_k_pipeline` |
 | 16 (IQ2_XXS) | `DS4_METAL_TENSOR_IQ2_XXS` | `g_moe_mul_mv_id_iq2_xxs_pipeline` |
 
-Metal additionally has a fused gate+up SwiGLU pair kernel for IQ2_XXS (`kernel_mul_mv_iq2_xxs_pair_swiglu_f32`, `metal/moe.metal:959`) — that's an optimisation (one expert visit produces both gate and up activations from a shared dequant), not a correctness requirement. The Q4_K path uses two separate matvecs.
+Metal additionally ships **fused variants for both IQ2_XXS and Q4_K**:
+
+| Variant | IQ2_XXS pipeline | Q4_K pipeline |
+|---|---|---|
+| Non-fused gate+up pair | `g_moe_mul_mv_id_iq2_xxs_pair_pipeline` (`metal/moe.metal:907`) | `g_moe_mul_mv_id_q4_k_pair_pipeline` (`metal/moe.metal:1097`) |
+| Fused gate+up+clamp+SwiGLU+route_w (single token) | `g_moe_mul_mv_id_iq2_xxs_pair_swiglu_pipeline` (`metal/moe.metal:959`) | `g_moe_mul_mv_id_q4_k_pair_swiglu_pipeline` (`metal/moe.metal:1160`) |
+| Fused down + 6-expert sum (single token, n_expert=6) | (n/a — IQ2 main model uses pair-SwiGLU only) | `g_moe_mul_mv_id_q4_k_sum6_pipeline` (`metal/moe.metal:1336`) — direct MTP fast path |
+
+The IQ2_XXS pair-SwiGLU is structurally a "true" fusion (the codebook layout lets gate and up share dequant work). The Q4_K pair-SwiGLU runs `kernel_mul_mv_q4_K_f32_impl` twice in the same threadgroup, then lane 0 of each SIMD group derives `mid = silu(clamp(g)) * clamp(u) * route_w` — gate/up outputs never spill to global memory. That's still a meaningful traffic save vs the non-fused path; the CUDA port should match the structure for full perf parity on MTP. There's also a `kernel_mul_mv_id_q2_K_sum6_f32` (`metal/moe.metal:1245`) for the main-model n_expert=6 decode path.
 
 The dispatch lives at `ds4_metal.m:12840–12907`:
 
@@ -255,7 +263,7 @@ A CUDA dispatcher in `routed_moe_launch` that:
 
 2. **Q4_K × Q8_K dot kernel.** Single-row matvec, mirroring `kernel_mul_mv_q4_K_f32_impl` in `metal/moe.metal:413`. Inputs: a quantised `cuda_block_q8_K *xq` of length `expert_in_dim / QK_K` and a Q4_K expert weight slab `cuda_block_q4_K *xw`. Output: one FP32 row. This is the "primitive" — every other Q4_K usage composes it. Test against the CPU reference (`block_q4_K` math in `ds4.c`) and against Metal output dumps captured with `DS4_METAL_DEBUG_DUMP=...`.
 
-3. **Q4_K gate+up paired matvec.** Two `dot` calls back-to-back over the same `xq` input, indexed by `selected[expert]`. Reuse the existing scheduling skeleton from the IQ2_XXS pair path. No fused-pair optimisation needed for v1 (Metal also runs the Q4_K case as two separate matvecs, not a fused pair).
+3. **Q4_K gate+up paired matvec.** Two `dot` calls back-to-back over the same `xq` input, indexed by `selected[expert]`. Reuse the existing scheduling skeleton from the IQ2_XXS pair path. For v1 you can keep gate and up as separate matvecs followed by a standalone SwiGLU pass; for v2 fuse them into one kernel that derives `mid = silu(clamp(g)) * clamp(u) * route_w` before writing, matching `kernel_mul_mv_id_q4_K_pair_swiglu_f32` (`metal/moe.metal:1160`). The fused variant halves the global-memory traffic for gate/up outputs and is what Metal uses for its MTP fast path.
 
 4. **Q4_K accumulating down matvec.** Same as (2) but the output is `out[] += router_weight * dot`. Reuse the existing Q2_K accumulator dispatcher's surrounding code.
 
@@ -277,7 +285,7 @@ A CUDA dispatcher in `routed_moe_launch` that:
 
 - The IQ2_XXS+Q2_K path has a 2D thread-block layout where each block computes one expert's row × one block-row of the input. For Q4_K, the per-block weight footprint is roughly **2× larger** (144 vs 84 bytes per block) so register pressure shifts. Start from the same launch config and only re-tune if you see <50% achieved bandwidth on the kernel-level probe (see §6.4).
 - Q4_K has a per-super-block FP16 `d, dmin` pair plus a 6-bit-packed array of 16 per-sub-block scale/min values. The unpacking is a small amount of integer work per block and is fully hidden behind the global-memory load latency. Don't try to precompute scales into a separate buffer — the savings are negligible and you lose memory locality.
-- Metal's IQ2_XXS pair-SwiGLU fused kernel saves one trip through global memory for the gate/up activations. Q4_K equivalent would also help. Defer to v2: parity first.
+- Metal ships a fused Q4_K pair-SwiGLU (`kernel_mul_mv_id_q4_K_pair_swiglu_f32`, `metal/moe.metal:1160`) and a fused n_expert=6 Q4_K sum6 (`kernel_mul_mv_id_q4_K_sum6_f32`, `metal/moe.metal:1336`) — together they're what gives the Metal MTP path its full lift. For v1 the CUDA port can run gate, up, SwiGLU, and per-expert down as separate kernels (correct, ~70% of Metal's MTP throughput); for v2 fuse pair-SwiGLU (single threadgroup runs both matvecs, lane 0 derives mid) and add a sum6 down kernel that accumulates 6 experts in registers and writes one F32 per output row. The two fusions are independent — either alone is worth ~10–15% throughput; together close the gap.
 
 ---
 
@@ -408,9 +416,13 @@ This refers to a planned higher-memory GGUF where the main model's routed expert
 
 In non-strict mode, the default-path verifier skips the batched 2-row verify entirely when the MTP head's confidence (top1−top2 logit margin) is below `3.0`. On predictable prompts (counting primes, JSON output) the MTP head is highly confident → batched verify runs → speculative gain. On chatty open-ended prompts the margin will dip → it'll skip verify and commit 1 token → no speedup on that step. This is by design. Don't try to tune it away in v1.
 
-### 7.7 The Metal pair-SwiGLU optimisation is *not* portable to Q4_K trivially
+### 7.7 Q4_K fused pair-SwiGLU exists on Metal — it just looks different from IQ2_XXS
 
-Metal's `kernel_mul_mv_iq2_xxs_pair_swiglu_f32` fuses gate dot + up dot + clamp + SwiGLU + scale + write-back into one kernel, halving memory traffic. The IQ2_XXS block packing happens to interleave gate and up coefficients in a friendly way; Q4_K does not have that property. So a Q4_K pair fusion would need to do two independent block walks anyway. Skip for v1.
+Metal's `kernel_mul_mv_iq2_xxs_pair_swiglu_f32` (`metal/moe.metal:959`) is a "true" fusion: the IQ2_XXS codebook lets gate and up share dequant work, so the fused kernel walks the codebook once per element.
+
+Metal *also* ships `kernel_mul_mv_id_q4_K_pair_swiglu_f32` (`metal/moe.metal:1160`), but it works differently: the kernel calls `kernel_mul_mv_q4_K_f32_impl` twice in the same threadgroup (so gate and up *do* go through two independent block walks), and then lane 0 of each SIMD group derives `mid = silu(clamp(g)) * clamp(u) * route_w` from the in-threadgroup outputs before they're written. The traffic saving is still real (gate and up never round-trip through global memory), but the kernel is structurally a "wrapped pair" rather than a packed-dequant fusion.
+
+The CUDA port can match this exactly: one threadblock per (row-tile, expert), one warp doing two `dev_dot_q4_K_q8_K_block` calls (gate then up), then lane 0 doing SwiGLU + route_w + writing mid to global. Worth ~+10–15% vs separate-kernel gate→up→SwiGLU. Defer to v2 if v1 is correct-but-slow; don't skip it permanently.
 
 ---
 
