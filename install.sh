@@ -183,7 +183,13 @@ clone_and_build() {
     fi
 
     log "Building ds4, ds4-server, ds4-bench (CUDA_ARCH=$CUDA_ARCH, -j$BUILD_JOBS) ..."
-    ( cd "$DS4_SRC_DIR" && make -j"$BUILD_JOBS" CUDA_ARCH="$CUDA_ARCH" )
+    # As of upstream commit be43477 ("Standardize context length errors", 2026-05-15)
+    # the default `make` target prints help instead of building. The named targets
+    # are `make cuda CUDA_ARCH=...`, `make cuda-spark`, `make cuda-generic`,
+    # `make cpu`. We call `make cuda CUDA_ARCH=$CUDA_ARCH` to preserve the
+    # user-facing `--cuda-arch sm_NNN` flag and keep working against the old
+    # default-`all`-target Makefile (where `cuda` was the same as `all`).
+    ( cd "$DS4_SRC_DIR" && make cuda -j"$BUILD_JOBS" CUDA_ARCH="$CUDA_ARCH" )
 
     for bin in ds4 ds4-server ds4-bench; do
         [[ -x "$DS4_SRC_DIR/$bin" ]] || die "Build did not produce $bin"
