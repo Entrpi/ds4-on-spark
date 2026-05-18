@@ -30,8 +30,13 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-DS4_REPO="${DS4_REPO:-https://github.com/antirez/ds4.git}"
-DS4_REF="${DS4_REF:-main}"
+# NOTE (temporary pin, 2026-05-18): defaults point at our open PR branch on
+# Entrpi/ds4 so the installer pulls the CUDA performance work (mmq dispatch +
+# in-process VMM weight arena + stream-sync'd CUDA graphs) that's currently
+# under review at https://github.com/antirez/ds4/pull/187. Revert these two
+# lines to antirez/ds4 + main once the PR lands upstream.
+DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
+DS4_REF="${DS4_REF:-pr-prep-2026-05-18}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
@@ -179,7 +184,16 @@ clone_and_build() {
         git clone --depth 1 -b "$DS4_REF" "$DS4_REPO" "$DS4_SRC_DIR"
     else
         log "Fast-forwarding $DS4_SRC_DIR ..."
-        ( cd "$DS4_SRC_DIR" && git fetch --depth 1 origin "$DS4_REF" && git reset --hard FETCH_HEAD )
+        (
+            cd "$DS4_SRC_DIR"
+            current_url=$(git remote get-url origin 2>/dev/null || echo "")
+            if [[ "$current_url" != "$DS4_REPO" ]]; then
+                log "Repointing origin: ${current_url:-<unset>} -> $DS4_REPO"
+                git remote set-url origin "$DS4_REPO"
+            fi
+            git fetch --depth 1 origin "$DS4_REF"
+            git reset --hard FETCH_HEAD
+        )
     fi
 
     log "Building ds4, ds4-server, ds4-bench (CUDA_ARCH=$CUDA_ARCH, -j$BUILD_JOBS) ..."
