@@ -4,9 +4,9 @@
 NVIDIA DGX Spark (GB10 / SM121, 128 GiB unified memory), with measured
 benchmarks and a roofline analysis grounded in the hardware ceiling.
 
-**Status:** Working end-to-end. Single-prompt smoke test passes; ds4's
-prefill + steady-state decode are within ~10–15 % of the bandwidth roofline
-for this quant on this hardware. MTP speculative decode is shipped by the
+**Status:** Working end-to-end. Single-prompt smoke test passes; ds4's decode
+runs at ~70–75 % of the memory-bandwidth roofline for this quant on this
+hardware, with real (non-bandwidth) headroom remaining. MTP speculative decode is shipped by the
 donor but produces **no speedup on CUDA today** — root cause traced to a
 quant-format gap in one CUDA kernel that silently rejects the MTP draft's
 Q4_K experts. The fix is ~700–900 LOC in `ds4_cuda.cu`, scoped in
@@ -14,7 +14,7 @@ Q4_K experts. The fix is ~700–900 LOC in `ds4_cuda.cu`, scoped in
 
 - **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine. CUDA backend landed 2026-05-11; this writeup uses HEAD `920f987` as of 2026-05-12.
 - **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf) — 81 GiB asymmetric quant: IQ2_XXS for routed-expert gate/up, Q2_K for routed-expert down (these dominate model bytes), Q8_0 for everything else dense (shared expert, attention projections, output head, router), F16 for LoRA matrices and the compressor/indexer, F32 norms. (FP8 in ds4 is a *runtime* KV-cache quantization — E4M3FN round-trip — not a stored weight format.) Plus an optional 3.6 GiB MTP draft GGUF.
-- **Hardware:** NVIDIA DGX Spark, GB10, SM121, 128 GiB LPDDR5X unified. The donor's `Makefile` defaults `CUDA_ARCH` to `native` and accepts any `sm_NNN` override, so `make CUDA_ARCH=sm_121` is GB10-correct with no patches needed.
+- **Hardware:** NVIDIA DGX Spark, GB10, SM121, 128 GiB LPDDR5X unified. The donor's `Makefile` has a `make cuda-spark` target that builds native `sm_121`, plus `make cuda CUDA_ARCH=sm_NNN` for an explicit override — both GB10-correct with no patches needed. (Building with an empty `-arch` measured ~25% slower prefill on GB10, so the explicit arch matters.)
 
 ## Quick start
 
@@ -76,10 +76,25 @@ It also speaks Anthropic-shape on `/v1/messages` (see donor README).
 
 ## Benchmarks
 
-All numbers from a single DGX Spark, `compute_cap=12.1`, CUDA 13.0.88,
-`ds4` HEAD at `920f987` (2026-05-12).
+Hardware: a single DGX Spark — GB10, `sm_121`, `compute_cap=12.1`, CUDA 13.0.88.
 
-### Build + cold start
+The `ds4-bench` throughput sweep below was refreshed **2026-05-21** against
+`ds4` at `1c4c5f0` (PR-prep branch: mmq Q8_0 dispatch + in-process VMM weight
+arena + per-layer CUDA-graph decode capture, the last on by default). The
+build/cold-start and `llama-benchy` HTTP numbers are from the earlier
+`920f987` (2026-05-12) snapshot and predate the CUDA-graph work.
+
+### Uplift vs. upstream
+
+![GB10 DGX Spark throughput, upstream antirez/ds4 vs the ds4-on-spark branch: prefill 1.16x to 1.09x faster, generation +12% to +13% faster, gains across the full 2k-64k context sweep](docs/gb10-uplift-vs-upstream.svg)
+
+Same model, same prompt corpus, both sides built at `sm_121` and benched on the
+same GB10 on 2026-05-21. The branch (mmq Q8_0 dispatch + in-process VMM weight
+arena + per-layer CUDA-graph decode capture) is **1.16× → 1.09× faster prefill**
+and **+12% → +13% faster decode** than upstream `antirez/ds4` (`a365e44`) across
+the full 2k–64k context sweep.
+
+### Build + cold start <sub>(`920f987` snapshot — pre-CUDA-graph)</sub>
 
 | Step | Time |
 |---|---|
@@ -91,68 +106,63 @@ After cold start, all subsequent benchmarks here are on a warm process.
 
 ### Throughput sweep (`ds4-bench`, direct CLI, no HTTP)
 
-ctx range 2k–16k with `--gen-tokens 64`:
+`ds4` at `1c4c5f0`, imatrix Q2 GGUF, `--gen-tokens 128`, layer-graph decode
+capture on (default). Prefill is measured on a fixed 2,048-token chunk and is
+prompt-sensitive, so the corpus is named: `rendered_prompts_nothink.txt`.
+ctx 2k–64k:
 
 | ctx | prefill t/s | decode t/s | KV size |
 |---:|---:|---:|---:|
-| 2,048 | 287.8 | 13.50 | 52 MB |
-| 6,144 | 332.6 | 13.47 | 109 MB |
-| 10,240 | 300.9 | 13.14 | 165 MB |
-| 14,336 | 303.3 | 13.00 | 221 MB |
-| 16,384 | 290.9 | 12.92 | 250 MB |
+| 2,048 | 458.3 | 15.37 | 52 MB |
+| 8,192 | 407.2 | 15.24 | 137 MB |
+| 16,384 | 392.5 | 14.99 | 250 MB |
+| 24,576 | 379.5 | 14.64 | 362 MB |
+| 32,768 | 367.8 | 14.11 | 475 MB |
+| 40,960 | 344.7 | 13.86 | 588 MB |
+| 49,152 | 333.6 | 13.66 | 701 MB |
+| 57,344 | 322.0 | 13.33 | 813 MB |
+| 65,536 | 312.2 | 13.00 | 926 MB |
 
-- Prefill steady at **~290–330 t/s** across 2k → 16k.
-- Decode steady at **~13 t/s**, mild ~5 % falloff out to 16k.
-- KV stays compact (250 MB at 16k) — compressed KV doing its job.
+- Prefill **~310–460 t/s** across 2k → 64k, tapering smoothly with context.
+- Decode **~13–15 t/s**, ~15 % falloff from 2k to 64k.
+- Per-layer CUDA-graph decode capture (on by default) contributes **+5 → +10 %**
+  of the decode rate vs. the eager path, the gain widening with context.
+- KV stays compact — 926 MB at 64k — compressed KV doing its job.
 
-### `llama-benchy`-style numbers (HTTP, steady-state)
+### `llama-benchy`-style numbers (HTTP)
 
-Same model, same hardware, via [`eugr/llama-benchy`](https://github.com/eugr/llama-benchy)
-through `ds4-server`'s OpenAI endpoint. Methodology mirrors llama-bench:
-`tg` measured as `(N − 1) / (t_last − t_first)` — **excludes first-token latency**.
+Refreshed 2026-05-21 against `ds4` at `1c4c5f0`, imatrix Q2 GGUF, via
+[`eugr/llama-benchy`](https://github.com/eugr/llama-benchy) `0.3.8` through
+`ds4-server`'s OpenAI endpoint — `--pp 2048 --tg 32 128 512 --depth 0 4096 16384`,
+3 runs each. This `llama-benchy` release reports `tg` as a near end-to-end
+decode rate, so the HTTP figures below line up with the direct-CLI decode
+sweep above (~15 t/s); earlier releases printed a steady-state-only `tg`
+roughly 2× higher.
 
 | test | t/s | peak t/s | ttfr (ms) |
 |---|---:|---:|---:|
-| pp2048 (prefill) | **364.5 ± 2.6** | — | 5890 |
-| tg32 @ d=0 | 29.2 ± 1.4 | 31.0 | — |
-| tg128 @ d=0 | 28.0 ± 1.0 | 34.0 | — |
-| tg512 @ d=0 | 22.8 ± 2.6 | 33.3 | — |
-| pp2048 @ d=4k | 339.5 ± 0.3 | — | 18712 |
-| tg32 @ d=4k | 27.8 ± 1.3 | 29.3 | — |
-| tg128 @ d=4k | 25.9 ± 0.5 | 30.0 | — |
-| tg512 @ d=4k | 23.3 ± 2.2 | 32.3 | — |
-| pp2048 @ d=16k | 310.7 ± 0.5 | — | 61401 |
-| tg32 @ d=16k | 24.1 ± 0.4 | 27.0 | — |
-| tg128 @ d=16k | 24.5 ± 0.8 | 30.7 | — |
-| tg512 @ d=16k | 24.2 ± 0.6 | 30.0 | — |
+| pp2048 (prefill) | **449.1** | — | 4791 |
+| tg32 @ d=0 | 16.76 ± 0.26 | 18.0 | — |
+| tg128 @ d=0 | 15.69 ± 0.03 | 18.7 | — |
+| tg512 @ d=0 | 15.47 ± 0.01 | 18.3 | — |
+| pp2048 @ d=4k | 416.4 | — | 15387 |
+| tg32 @ d=4k | 19.75 ± 2.66 | 21.8 | — |
+| tg128 @ d=4k | 15.52 ± 0.08 | 18.3 | — |
+| tg512 @ d=4k | 15.35 ± 0.05 | 18.0 | — |
+| pp2048 @ d=16k | 401.8 | — | 47505 |
+| tg32 @ d=16k | 16.42 ± 0.49 | 17.0 | — |
+| tg128 @ d=16k | 15.31 ± 0.34 | 17.3 | — |
+| tg512 @ d=16k | 14.95 ± 0.02 | 18.0 | — |
+
+Prefill holds **~400–450 t/s** and decode **~15–16 t/s** across 0–16k depth,
+consistent with the direct-CLI sweep. (`tg32` is the noisiest row — only 32
+tokens, so first-token setup still skews its mean and variance.)
 
 Reproduce:
 
 ```bash
 scripts/run-bench.sh --pp 2048 --tg 32 128 512 --depth 0 4096 16384
 ```
-
-### Two metrics, same workload
-
-The decode rate differs by ~2× between ds4's own log (`avg=12.94 t/s`) and
-llama-benchy's `tg` (`24.14 t/s`) on the same request. Both are correct; they
-answer different questions:
-
-- **ds4's `avg t/s`**: `total_gen_tokens / total_decode_wall_time` — **includes** the first-token post-prefill setup (~1.0–1.3 s on this model).
-- **llama-benchy `tg`**: `(N − 1) / (t_last − t_first)` — **excludes** first-token latency.
-
-Worked example for the 18k-context tg32 request:
-
-| | seconds | tokens | rate |
-|---|---:|---:|---:|
-| First token alone | ~1.20 | 1 | 0.83 t/s |
-| Steady-state tail | ~1.27 | 31 | 24.4 t/s |
-| Total | 2.47 | 32 | **12.94 t/s** (ds4) |
-| Steady-state only | 1.27 | 31 | **24.4 t/s** (llama-benchy) |
-
-For **interactive / agent use**, the first-token-inclusive rate (~13 t/s)
-matches user perception. For **long-form generation** the steady-state
-rate (~25–29 t/s) dominates wall time.
 
 ## Roofline analysis
 
@@ -184,28 +194,38 @@ Aggregated across all 17 shards (88.4 GB total):
 | MTP + HC + other | 0.30 GB | **~0.22 GB** |
 | KV cache reads (at 16k) | — | **~0.25 GB** |
 
-**Effective bytes per token at steady state: ~8 GB**
+**Effective bytes per token at steady state: ~11 GB** — the sum of the
+Active-per-token column, derived bottom-up from the model index, independent
+of any timing measurement.
 
 ### Roofline
 
-| Quantity | Value | % roofline |
-|---|---:|---:|
-| Kernel-effective BW | 225 GB/s | — |
-| Steady-state decode | **~28 t/s** | — |
-| Implied effective bytes per token | 225 / 28 = **8.0 GB** | — |
-| Strict roofline (BW / bytes-per-token) | 225 / 8 = 28.1 t/s | — |
-| **Steady-state efficiency** | | **~95 % of bandwidth roofline** |
-| First-token-inclusive rate | ~13 t/s | — |
-| Drag from first-token latency | 1.0–1.3 s overhead per request | — |
+Bytes/token is the bottom-up figure above; the decode rate is measured. The
+two are independent — not cross-derived. (An earlier draft computed one from
+the other and reported the circular result as "95 % saturated".)
 
-**Steady-state decode is essentially saturated.** Decoding faster on the same
-hardware + same quant requires either a tighter quant (FP4 / 1.5-bit experts),
-batched serving (amortize weight reads across users), or genuinely faster
-hardware. There is no easy 2–4× win available.
+| Quantity | Value |
+|---|---:|
+| Kernel-effective bandwidth | 225 GB/s |
+| Effective bytes per token (bottom-up) | ~11 GB |
+| Bandwidth roofline (BW ÷ bytes-per-token) | 225 / 11 ≈ **20.5 t/s** |
+| Measured decode, 0–16k ctx (ds4-bench + llama-benchy) | **~15 t/s** |
+| Decode efficiency | **~73 % of the bandwidth roofline** |
 
-The 13 t/s "perceived" number is **first-token latency**, not steady-state.
-That is a separately-tractable optimization target (warm-cache reuse from
-prior turns, persistent KV across thinking/answer phases, prefetch).
+**Decode runs at roughly three-quarters of the bandwidth roofline** — close,
+but not saturated. Around **1.4× of headroom** sits between the measured
+~15 t/s and the ~20 t/s ceiling, and that gap is *not* bandwidth: it is launch
+overhead, kernel-occupancy gaps, and non-overlapped work. The per-layer
+CUDA-graph decode capture this branch adds (see Benchmarks) reclaims part of
+it — precisely the launch-overhead component. Closing the rest is
+kernel-scheduling work, not a hardware wall.
+
+Beyond the roofline itself, going faster needs a tighter quant (FP4 / 1.5-bit
+experts) or batched serving (amortise weight reads across users).
+
+The bytes-per-token figure is a bottom-up estimate; ±20 % on it swings the
+efficiency to ~60–90 %. The qualitative result — real, non-bandwidth headroom
+— holds across that whole range.
 
 ## Under the hood: how the CUDA backend works
 
@@ -226,7 +246,7 @@ implementation actually doing?*:
 - **Q8 → F16 weight cache for prefill.** On startup, dense Q8_0 weights are
   dequantised once on-device into an F16 buffer; `cublasGemmEx` then uses
   tensor cores for multi-token prefill matmuls. That's why prefill is
-  ~300–360 t/s while decode is ~28 t/s — they take different routes through
+  ~310–460 t/s while decode is ~15 t/s — they take different routes through
   the matmul stack. Decode (`n_tok=1`) skips cuBLAS and uses hand-written
   Q8_0 matvecs where the cuBLAS launch overhead wouldn't amortize.
 - **Routed experts stay quantised.** IQ2_XXS / Q2_K kernels dequantise inline
@@ -336,10 +356,16 @@ That it's still slightly slower confirms the path is doing setup work
 and emitting no drafts. Consistent with `DS4_MTP_PROBE=1` showing 100 %
 draft-kernel failure.
 
-### MTP via llama-benchy (steady-state methodology)
+### MTP via llama-benchy
 
-llama-benchy excludes first-token latency, isolating the steady-state
-decode rate. Same hardware, three runs each, d=8192 tg=512:
+> ⚠ **Stale — pending re-bench.** The llama-benchy figures in this subsection
+> and the next predate the `tg`-definition change covered in the Benchmarks
+> section (the older release over-reported decode ~2×), and the "~95 % roofline"
+> premise they lean on is superseded by the Roofline analysis above. The MTP
+> *finding* — zero accepted drafts, no measurable speedup — is unaffected; only
+> the absolute t/s and that premise need redoing.
+
+Same hardware, three runs each, d=8192 tg=512:
 
 | Config | tg512 @ d=8192 t/s | peak t/s | prefill t/s |
 |---|---:|---:|---:|
