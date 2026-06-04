@@ -30,14 +30,17 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# NOTE (temporary pin, updated 2026-05-21): defaults point at our PR-prep
-# branch on Entrpi/ds4 so the installer pulls the full CUDA performance
-# stack — mmq Q8_0 dispatch + in-process VMM weight arena + stream-synced
-# MoE CUDA graphs + per-layer decode-body CUDA-graph capture (default-on as
-# of Step 8, bit-identical to eager through n=256 on GB10/sm_121). Revert
-# these two lines to antirez/ds4 + main once the work lands upstream.
+# NOTE (temporary pin, updated 2026-06-04): defaults point at our perf-tuning
+# branch on Entrpi/ds4 so the installer pulls the full CUDA performance stack —
+# mmq Q8_0 dispatch + in-process VMM weight arena (GB10) + stream-synced MoE
+# CUDA graphs + per-layer decode-body CUDA-graph capture + split-K/vectorized
+# F16 decode matmul + flash-decode attention split. This is the ~19 t/s / ~94%
+# roofline build the README benchmarks against (branch tip 5625a99); the no-MTP
+# decode is bit-identical to eager through n=256 on GB10/sm_121 (golden
+# b165ddd4). Revert these two lines to antirez/ds4 + main once the work lands
+# upstream.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-mmq-step-A-full-layer-graphs}"
+DS4_REF="${DS4_REF:-decode-perf-tuning}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
