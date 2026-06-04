@@ -199,103 +199,60 @@ right runtime — vLLM / SGLang with paged-attention batching are. ds4 is
 explicitly intentionally narrow (per donor README: "not a generic GGUF
 runner, not a wrapper around another runtime, not a framework").
 
-## 6. MTP (speculative decode) — broken on CUDA today; root cause known
+## 6. MTP (speculative decode) — works and bit-exact, but a single-stream loss
 
-The donor ships `--mtp <draft.gguf> --mtp-draft N`. The MTP support model
-is a separate 3.6 GiB Q4K/Q8_0/F32 GGUF.
+The donor ships `--mtp <draft.gguf> --mtp-draft N` with a separate 3.6 GiB
+Q4K/Q8_0/F32 draft GGUF.
 
-**Bottom line up front:** on the CUDA backend, the MTP draft kernel
-silently fails 100 % of the time because `routed_moe_launch` in
-`ds4_cuda.cu:8849` hard-codes `gate_type == IQ2_XXS && down_type == Q2_K`
-and rejects the MTP GGUF's **Q4_K** routed experts. The C-side speculative
-state machine is fine and the Metal backend has parity dispatch already.
-The empirical chain, Metal reference, and ~700–900-LOC fix scope are
-documented in [MTP_PARITY_GAP.md](MTP_PARITY_GAP.md).
+**Bottom line up front:** MTP now works on CUDA and is **bit-exact to non-MTP
+greedy decode** (the earlier Q4_K draft-kernel reject is closed at `5625a99`),
+but it is a **net throughput loss on single-stream decode**, so the strategic
+answer for a single-user Spark is unchanged: **run no-MTP**. MTP is a
+batched-serving feature, not a single-stream one. Detail in
+[MTP_PARITY_GAP.md](MTP_PARITY_GAP.md).
 
-The throughput tables below are correct measurements of "what happens
-today on CUDA when you pass `--mtp` and `--mtp-draft 2`" — they are
-*not* measurements of speculative decoding, because no speculation is
-actually occurring.
+**What changed since the earlier checkpoint.** This section previously reported
+MTP as a silent no-op (the draft kernel never produced a token) and projected a
+vLLM-comparable "+35–80 %" lift once a Q4_K MoE kernel landed. That kernel work
+landed; the projection was wrong for single-stream. Corrected:
 
-**Three draft depths, long-generation prompt (QuickSort essay, ~600 tokens):**
+- **Drafts are produced** — `DS4_MTP_PROBE=1 … | grep -c "mtp probe draft
+  failed"` prints **0** (was 58). The Q4_K MoE path was added to
+  `routed_moe_launch`.
+- **The verifier is bit-exact** — it runs the same mmq kernels as base decode
+  and defaults to a sequential 2-row verify, so MTP output is byte-identical to
+  no-MTP, eager and CUDA-graph-captured, on both arches. No-MTP determinism
+  goldens unchanged.
+- **But it's a net loss** — the exact verifier sweeps the weight-bound
+  projections once *per draft row* (verify ≈ 2× a decode, architecture-
+  independent), and acceptance saturates at ~1.4 (prose) / ~2.0 (numeric) suffix
+  tokens. Measured A/B (captured, accept-gate off): prose **−21 %**, numeric
+  **−15 %** vs no-MTP. Even at 100 % acceptance it loses (57 vs 51 ms/tok).
 
-| Config | decode t/s |
-|---|---:|
-| no MTP | 13.5 (bench) / 14.88 (is_prime) |
-| `--mtp-draft 1` | 13.81 |
-| `--mtp-draft 2` | 13.62 |
-| `--mtp-draft 4` | 13.63 |
-
-All three within noise of each other and slightly below no-MTP. With
-the parity gap closed, increasing `--mtp-draft` should produce
-monotonically larger speedups up to the verifier's batch limit (16 in
-the C state machine); today they're indistinguishable because the
-draft kernel is a no-op regardless of N.
-
-**High-predictability prompts at `--mtp-draft 2`:**
-
-| Prompt | no-MTP | MTP-2 | Δ |
-|---|---:|---:|---:|
-| Count 1 → 60 (deterministic) | 15.13 | 14.27 | **−5.7 %** |
-| Alphabets (English / NATO / Greek) | 15.02 | 14.32 | −4.7 % |
-| Declaration of Independence + 10 Presidents | 14.64 | 14.37 | −1.8 % |
-| 27 EU capitals | 14.92 | 14.48 | −2.9 % |
-| **mean** | **14.93** | **14.36** | **−3.8 %** |
-
-**The "counting 1 → 60" case is the load-bearing diagnostic.** Every
-next token is forced; a working MTP would accept at ~100 %. MTP is
-still slower. This is consistent with **MTP doing nothing useful**
-— the 3–6 % regression is the per-request setup cost of loading
-the 3.6 GiB MTP GGUF and allocating MTP raw-cache tensors, paid on
-every request with no speculative gain to offset it.
-
-`DS4_MTP_PROBE=1` confirms this directly: every draft attempt prints
-`ds4: mtp probe draft failed`. 58 failures over ~80 generated tokens
-in a prime-listing prompt. See [MTP_PARITY_GAP.md §3.2](MTP_PARITY_GAP.md#32-first-probe--ds4_mtp_probe1)
-for the reproducer.
-
-### 6a. MTP via llama-benchy (steady-state, first-token excluded)
-
-llama-benchy methodology isolates steady-state decode by excluding the
-first-token cost. Same hardware, 3 runs each, d=8192 tg=512:
-
-| Config | tg512 t/s | peak t/s | prefill t/s |
-|---|---:|---:|---:|
-| no MTP | 22.14 ± 2.57 | **28.33** ± 1.25 | 328.09 ± 0.51 |
-| MTP draft=2 | 23.61 ± 0.48 | **28.33** ± 0.47 | 328.49 ± 0.68 |
-| Δ | +6.6 % (within noise) | identical | identical |
-
-**Peak t/s is bit-identical** (28.33 in both runs). Since the CUDA MTP
-path produces zero accepted drafts, both configurations are running
-the same target-decode kernels at the same rate; the small mean delta
-and tighter variance under "MTP" are setup-cost shadow plus run-to-run
-noise, not a speculative-decode effect.
-
-### 6b. Expected behaviour once the parity gap is closed
-
-With a Q4_K-aware CUDA MoE kernel in place, MTP-2 on DSv4-Flash should
-deliver a steady-state lift comparable to what vLLM+FlashInfer delivers
-on Qwen3.5-122B-A10B on the same GB10 hardware:
-
-- **Qwen reference:** 28.3 → 38.4 t/s (+35.7 %) from MTP-2 alone; 51 t/s
-  when stacked with other vLLM-side optimisations (INT8 LM head, hybrid
-  INT4+FP8 dense). Independently reproduced; not a marketing number.
-- **DSv4 expected ceiling:** 35–50 t/s. DSv4 starts from a higher
-  bandwidth-roof saturation (~95 %) than Qwen on this hardware, so the
-  MTP gain there will come from FLOPs hidden behind shared weight reads
-  in the batched 2-row verifier rather than from leftover bandwidth.
-  Absolute number should land in the same ballpark; the marginal % gain
-  may be smaller than Qwen's because the bandwidth headroom is smaller.
+**Why the earlier projection was wrong — and why MTP still matters.**
+Perf-positive MTP on DeepSeek-V4-Flash *is* real: vLLM runs it in production
+(PR #43447) at acceptance ~1.8, K=3, with gains that grow with batch size
+(+30.9 % at BS=1 → +88.4 % at BS=4). The miss is structural to ds4's serving
+shape, not the model. Real spec-decode does one **batched** K-position verify (a
+single weight sweep across the draft block, *lossless* but not bit-identical)
+and amortizes it across a **request batch**. ds4's single-stream (BS=1),
+per-row, bit-identical verify gets neither axis — it pays ~2 weight sweeps for
+~1.6 accepted tokens.
 
 So the strategic picture for "should you wait for MTP or work around it?":
 
-- If you're a single-user interactive workload, ~13 t/s first-token-inclusive
-  is what you live with today; ~25–29 t/s steady-state is your long-form
-  rate. MTP-on-CUDA, when fixed, lifts both. Hold position.
-- If you need higher throughput *today*, the available wins are
-  (a) batched multi-user serving via a different runtime (vLLM/SGLang),
-  (b) tighter quant, or (c) different hardware.
-- If you're an analyst/contributor, the parity-gap doc is the work item.
+- **Single-user interactive:** run no-MTP. ~19 t/s fastest-path decode at short
+  context is your rate today; MTP does not improve it (and the accept-gate
+  auto-disables it on prose, so with default flags it's a wash). Don't enable
+  MTP for a single stream.
+- **Higher throughput today:** batched multi-user serving via a different
+  runtime (vLLM/SGLang), tighter quant, or different hardware.
+- **Where the real MTP win is (contributor):** batched serving for ds4 —
+  cross-request amortization + a lossless K-position verify over the multi-token
+  prefill path. A single-stream weight-shared verifier was prototyped and is
+  perf-neutral/negative (bit-exact, but the routed MoE batches to zero gain — the
+  two draft rows route to disjoint experts). That's why the lever is the
+  serving shape, not another kernel.
 
 ## 7. When ds4 is the right answer
 
@@ -348,14 +305,12 @@ likely they are to flip a decision:
 - **Concurrency / batched serving.** ds4 is designed as a single-session
   server. If you need many concurrent users at one Spark, you need
   either a different runtime or a fork of ds4 with batched dispatch.
-- **MTP parity gap upstream.** Either someone (us or the donor) lands
-  a Q4_K-aware CUDA MoE kernel — at which point MTP-2 should deliver
-  a 1.5–2× steady-state lift on DSv4-Flash. Scope and validation plan
-  in [MTP_PARITY_GAP.md](MTP_PARITY_GAP.md); ~700–900 LOC, 3.5–5 days
-  for an analyst familiar with CUDA + GGUF Q4_K. Re-run the
-  predictable-prompts MTP probe periodically; the day
-  `DS4_MTP_PROBE=1` stops printing `mtp probe draft failed` is the day
-  to re-measure everything in §6.
+- **MTP under batched serving.** The Q4_K parity gap is closed and MTP is
+  bit-exact, but it's a single-stream loss (§6) — the real lift needs
+  batched serving (cross-request amortization + a lossless K-position verify
+  over the prefill path), not another single-stream kernel. A single-stream
+  weight-shared verifier was prototyped and is perf-neutral/negative. The open
+  item is the serving-shape work, scoped in [MTP_PARITY_GAP.md](MTP_PARITY_GAP.md) §5.
 - **Tighter quant.** A 1.5-bit or FP4-dense recipe could push bytes/token
   down and lift the roofline. Quality tradeoff to be measured.
 

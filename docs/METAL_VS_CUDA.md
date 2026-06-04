@@ -193,10 +193,10 @@ The **set of routed-expert quants each backend can consume diverges** today:
 |---|---|---|
 | IQ2_XXS routed | ✓ | ✓ |
 | Q2_K routed | ✓ | ✓ |
-| Q4_K routed | ✓ — base (`metal/moe.metal:413` + `:831`), fused gate+up+SwiGLU (`:1160`), fused n_expert=6 down+sum (`:1336`) | ✗ (`ds4_cuda.cu:8849` returns failure) |
+| Q4_K routed | ✓ — base (`metal/moe.metal:413` + `:831`), fused gate+up+SwiGLU (`:1160`), fused n_expert=6 down+sum (`:1336`) | ✓ — MTP decode shape (n_tokens=1, n_expert=6) via `routed_moe_launch`'s Q4_K path, incl. fused n_expert=6 down+sum (`moe_down_q4K_sum6_qwarp32_kernel`); wider shapes via the mmq path |
 | Q8_0 routed | ✓ | (unused; falls through) |
 
-This is why MTP doesn't work on CUDA today: the MTP support GGUF stores its routed experts in Q4_K, the Metal pipeline accepts that, the CUDA pipeline does not, and the C-side speculative state machine treats the kernel-level failure as "no draft available." Closing this gap is a single-file ~700–900 LOC change; the scope is laid out in [`MTP_PARITY_GAP.md`](MTP_PARITY_GAP.md).
+This **used to** be why MTP didn't work on CUDA: the MTP support GGUF stores its routed experts in Q4_K, and CUDA's MoE launcher rejected anything but IQ2_XXS+Q2_K, so the C-side speculative state machine saw every draft fail and treated it as "no draft available." That gap is now closed — a Q4_K path was added to `routed_moe_launch`, so MTP produces drafts and is bit-exact to non-MTP. MTP is still off by default because it's a single-stream throughput loss (the exact verifier sweeps the weights ~2× per cycle); see [`MTP_PARITY_GAP.md`](MTP_PARITY_GAP.md).
 
 ---
 
@@ -264,17 +264,17 @@ Both backends share the high-level scheme: a router selects 6 experts per token 
 |---|---|---|
 | Router | `kernel_dsv4_router_select_*` family (metal/dsv4_misc.metal) | `router_select_kernel` (ds4_cuda.cu:3903) + `_warp_topk_kernel` (ds4_cuda.cu:4017) + `_parallel_kernel` (ds4_cuda.cu:3955) |
 | Expert dispatch geometry | One simdgroup per (token, slot), expert index read from router output | One block per (token, slot, output row) — `moe_gate_up_mid_kernel` (ds4_cuda.cu:7137), `_warp8_kernel` (ds4_cuda.cu:7196) |
-| Quant types accepted by the MoE matvec | Q8_0 / Q2_K / Q4_K / IQ2_XXS (dispatched at `ds4_metal.m:11580`, kernels in `metal/moe.metal` lines 321/413/522 etc.) | **IQ2_XXS+Q2_K only** — hard-coded at `ds4_cuda.cu:8849`: `if (gate_type != 16u \|\| down_type != 10u) return 0;`. Any other combination (notably Q4_K) returns failure. |
+| Quant types accepted by the MoE matvec | Q8_0 / Q2_K / Q4_K / IQ2_XXS (dispatched at `ds4_metal.m:11580`, kernels in `metal/moe.metal` lines 321/413/522 etc.) | IQ2_XXS+Q2_K, **plus Q4_K** for the MTP decode shape (added via `routed_moe_launch`'s `q4k_path`; the old `gate_type != 16u \|\| down_type != 10u` hard-reject now fires only for genuinely unsupported combos). Wider Q4_K shapes route through the mmq path. |
 | IQ2_XXS dequant | Inline in the expert matvec; codebook in `constant` address space | Inline; codebook in `__constant__` memory via `dev_dot_iq2_xxs_q8_K_block_lut()` (ds4_cuda.cu:6722-6776) |
 | Output reduction | Per-token accumulation in scratch | Atomic-add (`DS4_CUDA_MOE_ATOMIC_DOWN`) or non-atomic (`DS4_CUDA_MOE_NO_ATOMIC_DOWN`) — runtime-selectable |
-| SwiGLU + weight fusion | `kernel_dsv4_moe_swiglu_weight` + `_f16` variants (metal/moe.metal:129-199); both IQ2_XXS and Q4_K additionally ship fused gate+up+SwiGLU kernels (`kernel_mul_mv_iq2_xxs_pair_swiglu_f32` at `metal/moe.metal:959`, `kernel_mul_mv_id_q4_K_pair_swiglu_f32` at `:1160`), and Q4_K also has a fused n_expert=6 down+sum (`kernel_mul_mv_id_q4_K_sum6_f32` at `:1336`) used by the MTP fast path | Inlined into the gate/up/mid kernel for the IQ2_XXS+Q2_K path; Q4_K not yet implemented |
+| SwiGLU + weight fusion | `kernel_dsv4_moe_swiglu_weight` + `_f16` variants (metal/moe.metal:129-199); both IQ2_XXS and Q4_K additionally ship fused gate+up+SwiGLU kernels (`kernel_mul_mv_iq2_xxs_pair_swiglu_f32` at `metal/moe.metal:959`, `kernel_mul_mv_id_q4_K_pair_swiglu_f32` at `:1160`), and Q4_K also has a fused n_expert=6 down+sum (`kernel_mul_mv_id_q4_K_sum6_f32` at `:1336`) used by the MTP fast path | Inlined into the gate/up/mid kernel for the IQ2_XXS+Q2_K path; the Q4_K MTP path is implemented (paired gate/up matvec + fused n_expert=6 down+sum, `moe_down_q4K_sum6_qwarp32_kernel`) |
 | Tuning knobs | Function constants on the kernels | `DS4_CUDA_MOE_GATE_ROW`, `_MOE_NO_GATE_ROW`, `_MOE_ATOMIC_DOWN`, `_MOE_NO_ATOMIC_DOWN`, `_MOE_PROFILE` (all on the IQ2_XXS+Q2_K fast path) |
 
 Both implementations keep routed experts quantised throughout (no F16 pre-conversion). This is the choice that makes 2-bit ds4 useful: the experts are ~80% of the model bytes and converting them would erase the q2 win.
 
-**The "Q4_K-only on Metal" row is what breaks MTP on CUDA today.** The MTP support GGUF stores its routed experts in Q4_K (the main model uses IQ2_XXS+Q2_K). When the speculative decode state machine calls into the MoE kernel for the MTP block's routed experts on CUDA, the quant-type check rejects the call and returns failure. The C-side state machine treats that as "no draft available" and silently falls back to one-token decode — which is why MTP "looks alpha" externally even though the C-side machinery is sound. Metal hits exactly the same code path with `gate_type=Q4_K, down_type=Q4_K`, dispatches to `g_moe_mul_mv_id_q4_k_pipeline`, and MTP works.
+**This Q4_K gap used to break MTP on CUDA; it is now closed.** The MTP support GGUF stores its routed experts in Q4_K (the main model uses IQ2_XXS+Q2_K). The CUDA MoE launcher used to reject the Q4_K call and return failure, so the C-side state machine saw "no draft available" and fell back to one-token decode — which is why MTP "looked alpha" externally even though the C-side machinery was sound. A Q4_K path was since added (mirroring Metal's `gate_type=Q4_K, down_type=Q4_K` dispatch to `g_moe_mul_mv_id_q4_k_pipeline`), so MTP now produces drafts on CUDA and is bit-exact to non-MTP.
 
-The fix is to add the missing Q4_K dispatch case to `routed_moe_launch` in `ds4_cuda.cu`. Scope, validation plan, and Metal-reference pointers are in [`MTP_PARITY_GAP.md`](MTP_PARITY_GAP.md). It's the highest-leverage CUDA-side contribution to the project today.
+That Q4_K dispatch case has landed in `routed_moe_launch`. MTP is no longer correctness-blocked on CUDA — but it is a single-stream throughput loss (the exact verifier sweeps the weights ~2× per cycle), so the highest-leverage MTP work now is **batched serving**, not another kernel. See [`MTP_PARITY_GAP.md`](MTP_PARITY_GAP.md).
 
 ---
 
@@ -397,7 +397,7 @@ The shape of the knobs maps onto the shape of the backend: Metal exposes residen
 2. **Hot-swap kernel sources** via `DS4_METAL_*_SOURCE` env vars without recompiling — useful for kernel-level diagnostics on a running deploy.
 3. **Single-binary GPU portability** — one Metal binary runs on M1, M3, M4 without recompilation.
 4. **Detailed per-subsystem scratch reporting** that's actually useful for diagnosing memory pressure on a unified memory system.
-5. **Full routed-expert quant coverage in the MoE matvec.** Metal accepts IQ2_XXS / Q2_K / Q4_K / Q8_0; CUDA accepts only IQ2_XXS+Q2_K (`ds4_cuda.cu:8849`). This is the difference that makes MTP work on Metal and silently no-op on CUDA — see §8 and [`MTP_PARITY_GAP.md`](MTP_PARITY_GAP.md).
+5. **Broader routed-expert quant coverage in the MoE matvec.** Metal accepts IQ2_XXS / Q2_K / Q4_K / Q8_0 across all shapes with fused variants; CUDA now covers IQ2_XXS+Q2_K plus Q4_K for the MTP decode shape (wider Q4_K via the mmq path). The MTP-relevant gap that used to no-op MTP on CUDA is closed — see §8 and [`MTP_PARITY_GAP.md`](MTP_PARITY_GAP.md).
 
 ### Things CUDA does that Metal cannot
 

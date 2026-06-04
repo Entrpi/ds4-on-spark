@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 470" width="980" height="470" role="img" aria-label="ds4 decode vs context">
+<style>
+.bg{fill:#fff}
+.title{font:600 17px -apple-system,Segoe UI,Inter,Helvetica,Arial,sans-serif;fill:#1f2329}
+.subtitle{font:12.5px -apple-system,Segoe UI,Inter,Helvetica,Arial,sans-serif;fill:#566174}
+.axis-label{font:11px -apple-system,Segoe UI,Inter,Helvetica,Arial,sans-serif;fill:#566174}
+.legend{font:600 13px -apple-system,Segoe UI,Inter,Helvetica,Arial,sans-serif}
+.val{font:700 12px -apple-system,Segoe UI,Inter,Helvetica,Arial,sans-serif}
+.grid{stroke:#eef0f3;stroke-width:.8}.axis{stroke:#c8ccd2;stroke-width:1}
+</style>
+<rect class="bg" x="0" y="0" width="980" height="470"/>
+<text class="title" x="490.0" y="30" text-anchor="middle">ds4 fastest-path decode throughput vs context (decode-perf-tuning 5625a99)</text>
+<text class="subtitle" x="490.0" y="52" text-anchor="middle">CLI captured generation, weight-server client · DeepSeek-V4-Flash IQ2XXS imatrix · -n decode, temp 0</text>
+<line class="grid" x1="92" y1="384.0" x2="930" y2="384.0"/>
+<text class="axis-label" x="84" y="387.0" text-anchor="end">0</text>
+<line class="grid" x1="92" y1="342.3" x2="930" y2="342.3"/>
+<text class="axis-label" x="84" y="345.3" text-anchor="end">10</text>
+<line class="grid" x1="92" y1="300.6" x2="930" y2="300.6"/>
+<text class="axis-label" x="84" y="303.6" text-anchor="end">20</text>
+<line class="grid" x1="92" y1="258.9" x2="930" y2="258.9"/>
+<text class="axis-label" x="84" y="261.9" text-anchor="end">30</text>
+<line class="grid" x1="92" y1="217.1" x2="930" y2="217.1"/>
+<text class="axis-label" x="84" y="220.1" text-anchor="end">40</text>
+<line class="grid" x1="92" y1="175.4" x2="930" y2="175.4"/>
+<text class="axis-label" x="84" y="178.4" text-anchor="end">50</text>
+<line class="grid" x1="92" y1="133.7" x2="930" y2="133.7"/>
+<text class="axis-label" x="84" y="136.7" text-anchor="end">60</text>
+<line class="grid" x1="92" y1="92.0" x2="930" y2="92.0"/>
+<text class="axis-label" x="84" y="95.0" text-anchor="end">70</text>
+<line class="grid" x1="287.2" y1="92" x2="287.2" y2="384"/>
+<text class="axis-label" x="287.2" y="400" text-anchor="middle">1k</text>
+<line class="grid" x1="384.8" y1="92" x2="384.8" y2="384"/>
+<text class="axis-label" x="384.8" y="400" text-anchor="middle">2k</text>
+<line class="grid" x1="482.5" y1="92" x2="482.5" y2="384"/>
+<text class="axis-label" x="482.5" y="400" text-anchor="middle">4k</text>
+<line class="grid" x1="580.1" y1="92" x2="580.1" y2="384"/>
+<text class="axis-label" x="580.1" y="400" text-anchor="middle">8k</text>
+<line class="grid" x1="677.7" y1="92" x2="677.7" y2="384"/>
+<text class="axis-label" x="677.7" y="400" text-anchor="middle">16k</text>
+<line class="grid" x1="775.3" y1="92" x2="775.3" y2="384"/>
+<text class="axis-label" x="775.3" y="400" text-anchor="middle">32k</text>
+<line class="grid" x1="872.9" y1="92" x2="872.9" y2="384"/>
+<text class="axis-label" x="872.9" y="400" text-anchor="middle">64k</text>
+<line class="axis" x1="92" y1="92" x2="92" y2="384"/>
+<line class="axis" x1="92" y1="384" x2="930" y2="384"/>
+<text class="axis-label" x="40" y="238" text-anchor="middle" transform="rotate(-90 40 238)">decode tok/s</text>
+<text class="axis-label" x="511" y="418" text-anchor="middle">context tokens (log scale)</text>
+<polyline points="92.0,121.7 709.1,199.2 930.0,222.2" fill="none" stroke="#2fa97a" stroke-width="2.6"/>
+<circle cx="92.0" cy="121.7" r="3.4" fill="#2fa97a"/>
+<circle cx="709.1" cy="199.2" r="3.4" fill="#2fa97a"/>
+<circle cx="930.0" cy="222.2" r="3.4" fill="#2fa97a"/>
+<text class="val" x="100.0" y="114.7" fill="#2fa97a">62.9</text>
+<text class="val" x="922.0" y="215.2" fill="#2fa97a" text-anchor="end">38.8</text>
+<line x1="108" y1="74" x2="134" y2="74" stroke="#2fa97a" stroke-width="3"/>
+<text class="legend" x="140" y="78" fill="#2fa97a">PRO 6000</text>
+<polyline points="92.0,303.7 709.1,317.9 930.0,329.8" fill="none" stroke="#3b6fd6" stroke-width="2.6"/>
+<circle cx="92.0" cy="303.7" r="3.4" fill="#3b6fd6"/>
+<circle cx="709.1" cy="317.9" r="3.4" fill="#3b6fd6"/>
+<circle cx="930.0" cy="329.8" r="3.4" fill="#3b6fd6"/>
+<text class="val" x="100.0" y="296.7" fill="#3b6fd6">19.2</text>
+<text class="val" x="922.0" y="322.8" fill="#3b6fd6" text-anchor="end">13.0</text>
+<line x1="252" y1="74" x2="278" y2="74" stroke="#3b6fd6" stroke-width="3"/>
+<text class="legend" x="284" y="78" fill="#3b6fd6">GB10</text>
+<text class="subtitle" x="490.0" y="454" text-anchor="middle">GB10 DGX Spark (sm_121) + RTX PRO 6000 Blackwell (sm_120) · 2026-06-01 · captured fastest path</text>
+</svg>

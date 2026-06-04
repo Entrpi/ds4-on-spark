@@ -4,15 +4,16 @@
 NVIDIA DGX Spark (GB10 / SM121, 128 GiB unified memory), with measured
 benchmarks and a roofline analysis grounded in the hardware ceiling.
 
-**Status:** Working end-to-end. Single-prompt smoke test passes; ds4's decode
-runs at ~70–75 % of the memory-bandwidth roofline for this quant on this
-hardware, with real (non-bandwidth) headroom remaining. MTP speculative decode is shipped by the
-donor but produces **no speedup on CUDA today** — root cause traced to a
-quant-format gap in one CUDA kernel that silently rejects the MTP draft's
-Q4_K experts. The fix is ~700–900 LOC in `ds4_cuda.cu`, scoped in
-[docs/MTP_PARITY_GAP.md](docs/MTP_PARITY_GAP.md). The Metal backend is unaffected.
+**Status:** Working end-to-end. Single-prompt smoke test passes. On the
+`decode-perf-tuning` branch (`5625a99`), fastest-path decode reaches **~19 t/s
+on GB10** at short context — **~94 % of this quant's memory-bandwidth roofline**,
+up from ~73 % before the split-K F16 decode matmul + per-layer CUDA-graph
+capture. (MTP speculative decode now works on CUDA and is bit-exact to
+non-MTP at `5625a99`, but is a net throughput loss on single-stream decode,
+so the featured numbers are no-MTP — see the MTP section below.) The Metal
+backend is unaffected.
 
-- **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine. CUDA backend landed 2026-05-11; this writeup uses HEAD `920f987` as of 2026-05-12.
+- **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine. CUDA backend landed 2026-05-11. Architecture writeup uses HEAD `920f987` (2026-05-12); the **fastest-path benchmarks are the `decode-perf-tuning` branch at `5625a99`** (2026-06-01: split-K F16 decode matmul + flash-decode attention split on top of the mmq + VMM work).
 - **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf) — 81 GiB asymmetric quant: IQ2_XXS for routed-expert gate/up, Q2_K for routed-expert down (these dominate model bytes), Q8_0 for everything else dense (shared expert, attention projections, output head, router), F16 for LoRA matrices and the compressor/indexer, F32 norms. (FP8 in ds4 is a *runtime* KV-cache quantization — E4M3FN round-trip — not a stored weight format.) Plus an optional 3.6 GiB MTP draft GGUF.
 - **Hardware:** NVIDIA DGX Spark, GB10, SM121, 128 GiB LPDDR5X unified. The donor's `Makefile` has a `make cuda-spark` target that builds native `sm_121`, plus `make cuda CUDA_ARCH=sm_NNN` for an explicit override — both GB10-correct with no patches needed. (Building with an empty `-arch` measured ~25% slower prefill on GB10, so the explicit arch matters.)
 
@@ -78,21 +79,53 @@ It also speaks Anthropic-shape on `/v1/messages` (see donor README).
 
 Hardware: a single DGX Spark — GB10, `sm_121`, `compute_cap=12.1`, CUDA 13.0.88.
 
-The `ds4-bench` throughput sweep below was refreshed **2026-05-21** against
-`ds4` at `1c4c5f0` (PR-prep branch: mmq Q8_0 dispatch + in-process VMM weight
-arena + per-layer CUDA-graph decode capture, the last on by default). The
-build/cold-start and `llama-benchy` HTTP numbers are from the earlier
-`920f987` (2026-05-12) snapshot and predate the CUDA-graph work.
+Numbers here come from two instruments, kept distinct on purpose. The
+**fastest-path decode** figures (next) are the current `decode-perf-tuning`
+branch (`5625a99`, 2026-06-01), measured the way ds4 actually decodes — captured
+CUDA-graph generation via the CLI, as a weight-server client. The `ds4-bench`
+frontier-sweep tables further below are the earlier `1c4c5f0` (2026-05-21)
+snapshot (mmq Q8_0 dispatch + in-process VMM weight arena + per-layer CUDA-graph
+decode capture). Note `ds4-bench`'s per-frontier `gen_tps` **under-reads** the
+captured fast path, so treat its decode column as a conservative floor.
+Build/cold-start + `llama-benchy` HTTP numbers are from the `920f987`
+(2026-05-12) snapshot.
 
-### Uplift vs. upstream
+### Fastest-path decode <sub>(`decode-perf-tuning` `5625a99`, captured CLI)</sub>
 
-![GB10 DGX Spark throughput, upstream antirez/ds4 vs the ds4-on-spark branch: prefill 1.16x to 1.09x faster, generation +12% to +13% faster, gains across the full 2k-64k context sweep](docs/gb10-uplift-vs-upstream.svg)
+![ds4 fastest-path decode vs context on GB10 and RTX PRO 6000: PRO 6000 62.9 t/s tapering to 38.8 at ~96k, GB10 19.2 tapering to 13.0](docs/decode-vs-ctx.svg)
+
+Captured generation (`DS4_CUDA_LAYER_GRAPHS=1`, `--temp 0`), weight-server client,
+DeepSeek-V4-Flash IQ2XXS imatrix:
+
+| context | GB10 (sm_121) | RTX PRO 6000 (sm_120) |
+|---:|---:|---:|
+| short (≤0.5k) | **19.24 t/s** | **62.88 t/s** |
+| ~20k | 15.85 | 44.29 |
+| ~96k | 12.99 | 38.79 |
+
+- Decode tapers with context — the lightning indexer scores the growing
+  compressed KV before its top-512 cap — but stays above the prior snapshot and
+  upstream at every depth.
+- The gain over the `1c4c5f0` snapshot is the **split-K + vectorized F16 matmul**
+  (now the decode default) plus the PRO-6000 flash-decode attention split:
+  **+10 % GB10 / +22.6 % PRO 6000** on the captured path.
+- **Prefill is unchanged** on this branch (still mmq + VMM) — via the
+  weight-server client it lands **~1.2× GB10 / ~4.9× PRO 6000** over upstream
+  (GB10 shown below; the in-process direct-load path reads a touch higher on
+  PRO, ~5.9×).
+
+### Uplift vs. upstream <sub>(`5625a99` weight-server client, `ds4-bench`)</sub>
+
+![GB10 DGX Spark throughput, upstream antirez/ds4 vs the ds4-on-spark branch: prefill 1.20x to 1.10x faster, generation +18% to +15% faster, gains across the full 2k-64k context sweep](docs/gb10-uplift-vs-upstream.svg)
 
 Same model, same prompt corpus, both sides built at `sm_121` and benched on the
-same GB10 on 2026-05-21. The branch (mmq Q8_0 dispatch + in-process VMM weight
-arena + per-layer CUDA-graph decode capture) is **1.16× → 1.09× faster prefill**
-and **+12% → +13% faster decode** than upstream `antirez/ds4` (`a365e44`) across
-the full 2k–64k context sweep.
+same GB10 on 2026-06-02, the branch served as a **weight-server client** (the
+shipped fast path). The branch (mmq Q8_0 dispatch + VMM weight arena + per-layer
+CUDA-graph decode capture) is **1.20× → 1.10× faster prefill** and **+18% → +15%
+faster decode** than upstream `antirez/ds4` (`a365e44`) across the full 2k–64k
+context sweep. (Decode here is the `ds4-bench`-relative figure — the captured CLI
+fast path reads higher, ~19 t/s; the relative gain over upstream is what this
+panel shows.)
 
 ### Build + cold start <sub>(`920f987` snapshot — pre-CUDA-graph)</sub>
 
@@ -209,23 +242,25 @@ the other and reported the circular result as "95 % saturated".)
 | Kernel-effective bandwidth | 225 GB/s |
 | Effective bytes per token (bottom-up) | ~11 GB |
 | Bandwidth roofline (BW ÷ bytes-per-token) | 225 / 11 ≈ **20.5 t/s** |
-| Measured decode, 0–16k ctx (ds4-bench + llama-benchy) | **~15 t/s** |
-| Decode efficiency | **~73 % of the bandwidth roofline** |
+| Fastest-path decode, short ctx (`5625a99`, captured CLI) | **19.24 t/s** |
+| Decode efficiency | **~94 % of the bandwidth roofline** |
 
-**Decode runs at roughly three-quarters of the bandwidth roofline** — close,
-but not saturated. Around **1.4× of headroom** sits between the measured
-~15 t/s and the ~20 t/s ceiling, and that gap is *not* bandwidth: it is launch
-overhead, kernel-occupancy gaps, and non-overlapped work. The per-layer
-CUDA-graph decode capture this branch adds (see Benchmarks) reclaims part of
-it — precisely the launch-overhead component. Closing the rest is
-kernel-scheduling work, not a hardware wall.
+**Fastest-path decode now runs at ~94 % of the bandwidth roofline** — 19.24 t/s
+against the ~20.5 t/s ceiling, up from ~73 % (~15 t/s) on the pre-tuning
+snapshot. The split-K + vectorized F16 decode matmul and per-layer CUDA-graph
+capture (see Benchmarks) reclaimed most of the launch-overhead and
+kernel-occupancy gap that used to sit between decode and the bandwidth wall; at
+short context decode is now essentially bandwidth-bound. It still tapers with
+context — the lightning indexer scans the growing compressed KV before its
+top-512 cap — but that is attention work, not the weight-bandwidth wall this
+roofline measures.
 
 Beyond the roofline itself, going faster needs a tighter quant (FP4 / 1.5-bit
 experts) or batched serving (amortise weight reads across users).
 
 The bytes-per-token figure is a bottom-up estimate; ±20 % on it swings the
-efficiency to ~60–90 %. The qualitative result — real, non-bandwidth headroom
-— holds across that whole range.
+efficiency to roughly ~78 % up to saturation. The qualitative result — decode is
+now close to the bandwidth wall at short context — holds across that range.
 
 ## Under the hood: how the CUDA backend works
 
@@ -285,113 +320,92 @@ single-request wall time. If you need many concurrent users on one Spark
 you need a different runtime (vLLM/SGLang with paged-attention batching).
 ds4 is single-session by design.
 
-## MTP (speculative decode) — broken on CUDA today; root cause known
+## MTP (speculative decode) — works and bit-exact, but a net loss on single-stream
 
-The donor ships `--mtp <draft.gguf> --mtp-draft N`. The MTP support GGUF
-is a separate 3.6 GiB file (`DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf`).
-The donor README labels MTP as "alpha quality / experimental."
+The donor ships `--mtp <draft.gguf> --mtp-draft N`, using a separate 3.6 GiB
+draft GGUF (`DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf`). The donor README
+labels MTP "alpha quality / experimental."
 
-**On the CUDA backend on Spark today, MTP produces no speedup because
-the MTP draft kernel never produces a token.** Empirically traced and
-documented in detail in [`docs/MTP_PARITY_GAP.md`](docs/MTP_PARITY_GAP.md);
-the headline is:
+**Status on this branch (`5625a99`):** MTP now works on CUDA and is
+**bit-exact to non-MTP greedy decode** — but it is a **net throughput loss
+on single-stream decode**, so we leave it off and feature no-MTP numbers.
+Both of those changed since the earlier writeup, which said the draft kernel
+"never produces a token" and projected a large speedup once a Q4_K MoE kernel
+landed. Neither holds anymore; here is the corrected picture. The full
+analysis is in [`docs/MTP_PARITY_GAP.md`](docs/MTP_PARITY_GAP.md).
 
-- `routed_moe_launch` in `ds4_cuda.cu:8849` hard-codes
-  `gate_type == 16u (IQ2_XXS) && down_type == 10u (Q2_K)` and returns
-  failure for any other combination.
-- The MTP draft GGUF uses **Q4_K (type 12)** for its routed expert tensors.
-- Every MTP draft attempt silently fails inside this kernel; the C-side
-  speculative state machine treats that as "no draft available" and
-  commits one token per cycle — indistinguishable from non-MTP decode.
-- The Metal backend has the parity dispatch
-  (`g_moe_mul_mv_id_q4_k_pipeline`, `metal/moe.metal:413` / `:831`);
-  MTP works there.
-
-Reproduce in one line:
+**The Q4_K draft-kernel gap is closed.** The earlier blocker was real:
+`routed_moe_launch` in `ds4_cuda.cu` hard-rejected anything but
+`gate_type == IQ2_XXS && down_type == Q2_K`, and the MTP block's routed
+experts are Q4_K — so every draft attempt failed inside the MoE launcher and
+the speculative state machine fell back to one token per cycle. A Q4_K MoE
+path has since been added (the reject now only fires for genuinely
+unsupported quant combinations), so MTP produces drafts. The old repro that
+counted 58 draft-kernel failures now counts zero:
 
 ```bash
 DS4_MTP_PROBE=1 ./ds4 --cuda -m … --mtp … --mtp-draft 2 --temp 0 --nothink \
-  -p "List 20 prime numbers" 2>&1 | grep "mtp probe draft failed" | wc -l
-# Prints 58 — one failure per generation step.
+  -p "List 20 prime numbers" 2>&1 | grep -c "mtp probe draft failed"
+# 0   (was 58 — every draft now produces a token)
 ```
 
-The fix is scoped at ~700–900 LOC in a single file (`ds4_cuda.cu`); no
-changes needed to the C-side state machine, MTP weight binding, batched
-verifier, or KV/raw-cache plumbing — those are quant-agnostic and
-already work. See [`docs/MTP_PARITY_GAP.md`](docs/MTP_PARITY_GAP.md) for
-the full handoff: empirical chain, Metal reference, implementation order,
-validation plan, effort estimate.
+**The verifier is bit-exact.** At `5625a99` the exact verifier runs the same
+mmq kernels as the base decode path and defaults to a sequential 2-row
+verify, so MTP output is byte-identical to non-MTP greedy in both eager and
+CUDA-graph-captured mode, on both sm_120 and sm_121. The no-MTP determinism
+goldens are unchanged (GB10 long-context `b165ddd4`, PRO 6000 opp-c golden).
 
-### What the throughput tables actually look like today
+**Why it's still a loss — performance, not correctness.** The exact 2-row
+verifier sweeps the weight-bound projections (Q/KV, attn-out, routed MoE)
+**once per draft row** instead of sharing one sweep, so verifying 2 tokens
+costs ~2× a single decode (~105 ms vs ~52 ms on GB10; ~34 vs ~16 ms on
+PRO 6000 — the 2× ratio is architecture-independent). The MTP head's
+acceptance saturates at ~1.4 suffix tokens on prose / ~2.0 on numeric lists,
+so the cycle does ~2× the work for well under 2× the tokens. Measured A/B
+(weight-server client, draft=2, temp 0, CUDA-graph-captured, accept-gate
+forced off):
 
-Because the MTP path is a no-op on CUDA, the numbers below are
-"target-model decode with extra startup cost for loading the MTP GGUF."
-
-Measured at `draft=2` against matching no-MTP baselines, four
-high-predictability prompts (ds4 CLI, first-token-inclusive):
-
-| Prompt | no-MTP t/s | MTP-2 t/s | Δ |
+| Workload | no-MTP t/s | MTP (seq verify) t/s | Δ |
 |---|---:|---:|---:|
-| Count 1 → 60 (fully deterministic) | 15.13 | 14.27 | **−5.7 %** |
-| English / NATO / Greek alphabets | 15.02 | 14.32 | −4.7 % |
-| Declaration of Independence + 10 Presidents | 14.64 | 14.37 | −1.8 % |
-| 27 EU capitals alphabetical | 14.92 | 14.48 | −2.9 % |
-| **mean** | **14.93** | **14.36** | **−3.8 %** |
+| Prose (n=128) | 19.64 | 15.58 | **−21 %** |
+| Numeric lists (n=200) | 19.52 | 16.51 | −15 % |
 
-The 3–6 % regression is the MTP support model's per-request setup cost
-(loading and binding the extra 3.6 GiB GGUF, allocating MTP raw-cache
-tensors), paid on every request, with no speculative gain to offset it.
-Three separate `--mtp-draft` values (1, 2, 4) all land within noise:
+Even at 100 % acceptance MTP loses: 172 ms / 3 tokens = 57 ms/tok vs
+51 ms/tok for plain decode. In production the accept-gate auto-disables MTP
+when draft confidence is low (most prose), so with default flags it reads as
+a wash rather than a loss — but there is no single-stream win to capture here,
+so the featured benchmarks are no-MTP.
 
-| Config | decode t/s (QuickSort prompt) |
-|---|---:|
-| no MTP | 13.5 (bench) / 14.88 (`is_prime`) |
-| `--mtp-draft 1` | 13.81 |
-| `--mtp-draft 2` | 13.62 |
-| `--mtp-draft 4` | 13.63 |
+**This is not the model's fault — perf-positive MTP on DeepSeek-V4-Flash is
+real.** vLLM runs MTP on this exact model in production
+([vLLM #43447](https://github.com/vllm-project/vllm/pull/43447) comment
+benchmarks): mean acceptance length 1.80–1.86, per-position accept 0.80–0.86,
+draft depth K=3, with accepted throughput that grows with batch size
+(+30.9 % at BS=1 rising to +88.4 % at BS=4). The difference is structural.
+vLLM does **one batched K-position verify** — a single weight sweep across
+the whole draft block, "lossless" (a valid greedy decode of the target) but
+*not* bit-identical to the single-token path — and amortizes that sweep
+across a **request batch**. ds4's single-stream (BS=1), per-row,
+bit-identical verify gets neither axis: it pays ~2 weight sweeps for ~1.6
+accepted tokens.
 
-**Counting 1→60 is fully deterministic** — every next token is forced —
-so MTP acceptance rate should be ~100 % *if MTP were producing drafts*.
-That it's still slightly slower confirms the path is doing setup work
-and emitting no drafts. Consistent with `DS4_MTP_PROBE=1` showing 100 %
-draft-kernel failure.
+### The path to a real win is batched serving, not a cleverer single-stream verifier
 
-### MTP via llama-benchy
+We prototyped the obvious fix — a weight-shared exact verifier that batches
+the per-row-independent projections into one sweep. It is bit-exact, but on
+single-stream it is perf-neutral-to-negative:
 
-> ⚠ **Stale — pending re-bench.** The llama-benchy figures in this subsection
-> and the next predate the `tg`-definition change covered in the Benchmarks
-> section (the older release over-reported decode ~2×), and the "~95 % roofline"
-> premise they lean on is superseded by the Roofline analysis above. The MTP
-> *finding* — zero accepted drafts, no measurable speedup — is unaffected; only
-> the absolute t/s and that premise need redoing.
+- the routed MoE batches to **zero** gain — the two draft rows route to
+  disjoint experts, so a "shared" sweep just reads the union of both rows'
+  experts (no bandwidth saved);
+- attn-out is too small a weight (low-rank) for sharing it to matter;
+- the sequential verifier's early-stop on partial accepts beats an
+  always-both-rows interleave.
 
-Same hardware, three runs each, d=8192 tg=512:
-
-| Config | tg512 @ d=8192 t/s | peak t/s | prefill t/s |
-|---|---:|---:|---:|
-| no MTP | 22.14 ± 2.57 | **28.33** ± 1.25 | 328.09 ± 0.51 |
-| MTP draft=2 | 23.61 ± 0.48 | **28.33** ± 0.47 | 328.49 ± 0.68 |
-| Δ | +6.6 % (within noise) | identical | identical |
-
-**Peak t/s is bit-identical** (28.33 in both runs). Because the CUDA
-MTP path produces zero accepted drafts, the two configurations are
-running the same target-decode kernels at the same rate; the small
-mean delta and tighter variance are setup-cost shadow plus run-to-run
-noise, not a speculative-decode effect.
-
-### Expected behaviour once the parity gap is closed
-
-With the CUDA Q4_K MoE kernel in place, MTP-2 on DSv4-Flash should
-deliver a steady-state lift comparable to what vLLM+FlashInfer
-delivers on Qwen3.5-122B-A10B on the same GB10 hardware: **28.3 →
-38.4 t/s (+35.7 %) from MTP-2 alone, up to 51 t/s (+80 %) stacked
-with other optimisations.** DSv4 starts from a higher bandwidth-roof
-saturation (~95 %), so the MTP gain there will come from FLOPs hidden
-behind shared weight reads in the batched 2-row verifier rather than
-from leftover bandwidth — but the absolute number should land in the
-35–50 t/s range. See
-[`docs/MTP_PARITY_GAP.md`](docs/MTP_PARITY_GAP.md) §1.2 and §9 for
-the full argument.
+The real lever is cross-request amortization plus a lossless K-position
+verify over the multi-token prefill path (which already runs one weight
+sweep for many tokens) — i.e. the batched-serving work, tracked separately.
+**Bottom line for single-stream Spark today: leave MTP off.**
 
 ## Quality checks (qualitative)
 
@@ -437,10 +451,12 @@ docs/
                               ds4_cuda.cu — kernel surface, command lifecycle,
                               model attach, quantisation, and where each
                               backend's design diverges
-  MTP_PARITY_GAP.md           Root-cause of "MTP gives no speedup on CUDA":
-                              one quant-format gap in ds4_cuda.cu's MoE
-                              kernel. Empirical chain, Metal reference,
-                              ~700-900 LOC fix scope, validation plan.
+  MTP_PARITY_GAP.md           MTP status on CUDA: the Q4_K draft-kernel gap
+                              is closed (5625a99) and MTP is bit-exact to
+                              non-MTP; the remaining gap is single-stream
+                              verify cost (verify ~2x a decode), which only
+                              batched serving fixes — not a single-stream
+                              kernel.
 ```
 
 ## Reproducing the benchmarks
