@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" width="1200" height="560" role="img" aria-label="DSpark generation frontier">
+<style>
+  .bg { fill: #ffffff; }
+  .title { font: 600 17px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #1f2329; }
+  .subtitle { font: 12.5px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #566174; }
+  .note { font: 10.5px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #9aa3b0; }
+  .axis-label { font: 11px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #566174; }
+  .legend { font: 12px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #1f2329; }
+  .callout { font: 700 12px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #3b5bdb; }
+  .tokstep { font: 10px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #3b5bdb; }
+  .grid { stroke: #eef0f3; stroke-width: 0.8; }
+  .axis { stroke: #c8ccd2; stroke-width: 1; }
+  .line-upstream { fill: none; stroke: #7a8497; stroke-width: 2; }
+  .line-plain { fill: none; stroke: #2fa97a; stroke-width: 2.2; }
+  .line-dspark { fill: none; stroke: #4263eb; stroke-width: 2.6; }
+  .line-dsparkcode { fill: none; stroke: #e8590c; stroke-width: 2.2; stroke-dasharray: 7 4; }
+  .gain { fill: #4263eb; fill-opacity: 0.10; stroke: none; }
+</style>
+<rect class="bg" x="0" y="0" width="1200" height="560"/>
+<text class="title" x="600" y="30" text-anchor="middle">Ship decode across context frontiers: plain vs DSpark ship (yield-quench + kv-depth gate) (GB10 Spark)</text>
+<text class="subtitle" x="600" y="52" text-anchor="middle">V4 Flash IQ2XXS · HEAD 94ee225 · pp=2048 tg=128, W&amp;P continuation · benchy token_ids-exact on the cont path (post-1da9467); upstream engine-measured</text>
+<g transform="translate(170,66)">
+<line class="line-upstream" x1="0" y1="8" x2="30" y2="8"/><text class="legend" x="38" y="12">upstream main (80ebbc3)</text>
+<line class="line-plain" x1="290" y1="8" x2="320" y2="8"/><text class="legend" x="328" y="12">plain cont+capture</text>
+<line class="line-dspark" x1="520" y1="8" x2="550" y2="8"/><text class="legend" x="558" y="12">DSpark ship — W&amp;P prose (adversarial floor)</text>
+</g>
+<g transform="translate(170,88)">
+<line class="line-dsparkcode" x1="520" y1="8" x2="550" y2="8"/><text class="legend" x="558" y="12">DSpark ship — C source continuation (favorable)</text>
+</g>
+<line class="grid" x1="78" y1="468.0" x2="1172" y2="468.0"/>
+<text class="axis-label" x="70" y="471.0" text-anchor="end">0</text>
+<line class="grid" x1="78" y1="398.4" x2="1172" y2="398.4"/>
+<text class="axis-label" x="70" y="401.4" text-anchor="end">6</text>
+<line class="grid" x1="78" y1="328.8" x2="1172" y2="328.8"/>
+<text class="axis-label" x="70" y="331.8" text-anchor="end">12</text>
+<line class="grid" x1="78" y1="259.2" x2="1172" y2="259.2"/>
+<text class="axis-label" x="70" y="262.2" text-anchor="end">18</text>
+<line class="grid" x1="78" y1="189.6" x2="1172" y2="189.6"/>
+<text class="axis-label" x="70" y="192.6" text-anchor="end">24</text>
+<line class="grid" x1="78" y1="120.0" x2="1172" y2="120.0"/>
+<text class="axis-label" x="70" y="123.0" text-anchor="end">30</text>
+<line class="grid" x1="78.0" y1="120" x2="78.0" y2="468"/>
+<text class="axis-label" x="78.0" y="484" text-anchor="middle">2k</text>
+<line class="grid" x1="338.5" y1="120" x2="338.5" y2="468"/>
+<text class="axis-label" x="338.5" y="484" text-anchor="middle">32k</text>
+<line class="grid" x1="616.3" y1="120" x2="616.3" y2="468"/>
+<text class="axis-label" x="616.3" y="484" text-anchor="middle">64k</text>
+<line class="grid" x1="894.2" y1="120" x2="894.2" y2="468"/>
+<text class="axis-label" x="894.2" y="484" text-anchor="middle">96k</text>
+<line class="grid" x1="1172.0" y1="120" x2="1172.0" y2="468"/>
+<text class="axis-label" x="1172.0" y="484" text-anchor="middle">128k</text>
+<line class="axis" x1="78" y1="120" x2="78" y2="468"/>
+<line class="axis" x1="78" y1="468" x2="1172" y2="468"/>
+<text class="axis-label" x="28" y="294.0" text-anchor="middle" transform="rotate(-90 28 294.0)">tok/s</text>
+<text class="axis-label" x="625" y="502" text-anchor="middle">context depth (tokens)</text>
+<polygon class="gain" points="78.0,196.5 95.4,222.3 112.7,263.8 130.1,265.4 147.5,266.4 164.8,267.7 182.2,266.4 199.6,267.8 216.9,248.4 234.3,269.0 251.7,273.9 269.0,275.0 286.4,277.5 303.7,280.4 321.1,292.6 338.5,293.2 355.8,293.4 373.2,294.5 390.6,295.5 407.9,297.3 425.3,298.1 442.7,299.3 460.0,299.3 477.4,299.5 494.8,302.8 512.1,302.8 529.5,302.8 546.9,306.5 564.2,307.3 581.6,307.3 599.0,307.3 616.3,307.7 685.8,307.8 755.2,313.3 824.7,315.7 894.2,318.9 963.6,321.5 1033.1,323.0 1102.5,327.2 1172.0,331.8 1172.0,349.2 1102.5,345.6 1033.1,344.0 963.6,342.3 894.2,340.3 824.7,338.4 755.2,336.3 685.8,333.7 616.3,332.2 599.0,331.7 581.6,331.0 564.2,330.4 546.9,329.7 529.5,328.6 512.1,328.5 494.8,327.3 477.4,326.9 460.0,326.1 442.7,325.8 425.3,325.0 407.9,324.5 390.6,323.9 373.2,323.1 355.8,323.0 338.5,322.2 321.1,322.1 303.7,317.4 286.4,316.6 269.0,315.5 251.7,314.8 234.3,313.7 216.9,312.9 199.6,312.2 182.2,311.4 164.8,311.6 147.5,310.8 130.1,309.9 112.7,309.2 95.4,307.2 78.0,306.5"/>
+<polyline class="line-upstream" points="78.0,306.5 95.4,307.2 112.7,309.2 130.1,309.9 147.5,310.8 164.8,311.6 182.2,311.4 199.6,312.2 216.9,312.9 234.3,313.7 251.7,314.8 269.0,315.5 286.4,316.6 303.7,317.4 321.1,322.1 338.5,322.2 355.8,323.0 373.2,323.1 390.6,323.9 407.9,324.5 425.3,325.0 442.7,325.8 460.0,326.1 477.4,326.9 494.8,327.3 512.1,328.5 529.5,328.6 546.9,329.7 564.2,330.4 581.6,331.0 599.0,331.7 616.3,332.2 685.8,333.7 755.2,336.3 824.7,338.4 894.2,340.3 963.6,342.3 1033.1,344.0 1102.5,345.6 1172.0,349.2"/>
+<polyline class="line-plain" points="78.0,256.0 95.4,258.2 112.7,259.4 130.1,260.6 147.5,260.3 164.8,257.8 182.2,263.1 199.6,264.8 216.9,266.6 234.3,267.7 251.7,269.7 269.0,271.9 286.4,273.3 303.7,274.7 321.1,290.2 338.5,290.9 355.8,290.5 373.2,292.7 390.6,294.7 407.9,294.0 425.3,294.5 442.7,300.4 460.0,296.3 477.4,297.5 494.8,298.7 512.1,301.0 529.5,300.4 546.9,301.6 564.2,302.9 581.6,302.5 599.0,304.5 616.3,306.5"/>
+<polyline class="line-dspark" points="78.0,196.5 95.4,222.3 112.7,263.8 130.1,265.4 147.5,266.4 164.8,267.7 182.2,266.4 199.6,267.8 216.9,248.4 234.3,269.0 251.7,273.9 269.0,275.0 286.4,277.5 303.7,280.4 321.1,292.6 338.5,293.2 355.8,293.4 373.2,294.5 390.6,295.5 407.9,297.3 425.3,298.1 442.7,299.3 460.0,299.3 477.4,299.5 494.8,302.8 512.1,302.8 529.5,302.8 546.9,306.5 564.2,307.3 581.6,307.3 599.0,307.3 616.3,307.7 685.8,307.8 755.2,313.3 824.7,315.7 894.2,318.9 963.6,321.5 1033.1,323.0 1102.5,327.2 1172.0,331.8"/>
+<polyline class="line-dsparkcode" points="78.0,211.9 112.7,225.3 147.5,267.5 182.2,267.5 216.9,268.0 251.7,273.4 286.4,275.0 321.1,275.0 355.8,261.8 390.6,261.8 425.3,254.1 460.0,255.6 494.8,255.6 529.5,271.0 564.2,284.7 599.0,305.6"/>
+<circle cx="78.0" cy="211.9" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="112.7" cy="225.3" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="147.5" cy="267.5" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="182.2" cy="268.0" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="216.9" cy="223.4" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="251.7" cy="273.4" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="286.4" cy="275.0" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="321.1" cy="292.5" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="355.8" cy="261.8" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="390.6" cy="254.1" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="425.3" cy="301.4" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="460.0" cy="225.0" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="494.8" cy="255.6" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="529.5" cy="271.0" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="564.2" cy="284.7" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<circle cx="599.0" cy="305.6" r="2" fill="#e8590c" fill-opacity="0.25"/>
+<text class="callout" style="fill:#e8590c" x="502.8" y="247.6">1.25× plain @ 50k (code)</text>
+<circle cx="78.0" cy="196.5" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="95.4" cy="222.3" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="112.7" cy="265.4" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="130.1" cy="263.8" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="147.5" cy="267.7" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="164.8" cy="266.4" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="182.2" cy="267.8" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="199.6" cy="244.9" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="216.9" cy="269.0" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="234.3" cy="248.4" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="251.7" cy="273.9" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="269.0" cy="275.0" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="286.4" cy="277.5" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="303.7" cy="280.4" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="321.1" cy="293.2" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="338.5" cy="292.6" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="355.8" cy="294.5" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="373.2" cy="293.4" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="390.6" cy="295.5" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="407.9" cy="297.3" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="425.3" cy="298.1" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="442.7" cy="299.3" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="460.0" cy="299.5" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="477.4" cy="297.7" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="494.8" cy="303.8" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="512.1" cy="302.8" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="529.5" cy="293.2" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="546.9" cy="306.5" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="564.2" cy="307.4" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="581.6" cy="307.3" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="599.0" cy="305.5" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="616.3" cy="307.7" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="685.8" cy="307.8" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="755.2" cy="313.3" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="824.7" cy="315.7" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="894.2" cy="318.9" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="963.6" cy="321.5" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="1033.1" cy="323.0" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="1102.5" cy="327.2" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<circle cx="1172.0" cy="331.8" r="2" fill="#4263eb" fill-opacity="0.25"/>
+<text class="callout" x="86.0" y="188.5">1.68× @ 2k</text>
+<text class="tokstep" x="86.0" y="212.5">2.70 tok/step</text>
+<text class="callout" x="346.5" y="285.2">1.20× @ 32k</text>
+<text class="tokstep" x="346.5" y="309.2">1.04 tok/step</text>
+<text class="callout" x="624.3" y="299.7">1.18× @ 64k</text>
+<text class="callout" x="1164.0" y="323.8" text-anchor="end">1.15× @ 128k</text>
+<text class="subtitle" x="600" y="524" text-anchor="middle">content decides the win, not depth: W&amp;P prose ~52% accept = floor test; C source (ds4.c continuation) mean 1.11x / peak 1.4x plain at 47k; suite reaches 1.7x · 1 run/pt; line = 3-pt rolling median, dots = raw</text>
+<text class="subtitle" x="600" y="542" text-anchor="middle">terminal yield-quench clips low-accept requests to ≥0.96x plain (always-spec floor was 0.72x); DS4_DSPARK_MAX_KV=65536 hands off &gt;64k · Q2K drafter (ship default candidate) · healthy-boot per kvgate law</text>
+</svg>

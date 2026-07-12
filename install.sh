@@ -30,17 +30,16 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# NOTE (temporary pin, updated 2026-06-04): defaults point at our perf-tuning
-# branch on Entrpi/ds4 so the installer pulls the full CUDA performance stack —
-# mmq Q8_0 dispatch + in-process VMM weight arena (GB10) + stream-synced MoE
-# CUDA graphs + per-layer decode-body CUDA-graph capture + split-K/vectorized
-# F16 decode matmul + flash-decode attention split. This is the ~19 t/s / ~94%
-# roofline build the README benchmarks against (branch tip 5625a99); the no-MTP
-# decode is bit-identical to eager through n=256 on GB10/sm_121 (golden
-# b165ddd4). Revert these two lines to antirez/ds4 + main once the work lands
-# upstream.
+# Pin (updated 2026-07-13): the Entrpi/ds4 fork release tag v0.1.1 — the full
+# CUDA serving stack the README benchmarks against: D2R tensor-core prefill
+# (~2x upstream on GB10), per-layer CUDA-graph decode capture, continuous
+# batching, weight server, and DSpark lossless speculative decode with the
+# terminal yield-quench controller (default on) + kv-depth gate, so served
+# decode ~= max(speculative, plain) across content and depth. Set
+# DS4_REF=main + DS4_REPO=antirez/ds4 for the upstream engine without the
+# fork's serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-decode-perf-tuning}"
+DS4_REF="${DS4_REF:-v0.1.1}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
@@ -52,6 +51,8 @@ HF_REPO="${HF_REPO:-antirez/deepseek-v4-gguf}"
 GGUF_FILE="${GGUF_FILE:-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf}"
 MTP_FILE="${MTP_FILE:-DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf}"
 
+DSPARK_FILE="${DSPARK_FILE:-DSpark-drafter-Q2K-Q8.gguf}"
+
 DS4_PORT="${DS4_PORT:-8000}"
 DS4_CTX="${DS4_CTX:-32768}"
 
@@ -62,6 +63,7 @@ SKIP_MTP=0
 SKIP_SMOKE=0
 START_SERVER=0
 WITH_MTP=0
+WITH_DSPARK=0
 
 usage() {
     cat <<EOF
@@ -73,6 +75,10 @@ Flags:
   --no-build              Skip clone + build (use existing $DS4_SRC_DIR/ds4*).
   --no-download           Skip GGUF download.
   --with-mtp              Also download the MTP speculative-decode GGUF.
+  --with-dspark           Serve with DSpark speculative decode (implies
+                          --with-mtp; needs \$DSPARK_FILE in the GGUF dir —
+                          build it once with gguf-tools/dspark_extract.py,
+                          see README "DSpark" section).
   --no-smoke              Skip post-install smoke test.
   --start                 Start ds4-server on :$DS4_PORT after install.
   --src-dir DIR           Where to put antirez/ds4 source (default: $DS4_SRC_DIR).
@@ -95,6 +101,7 @@ while [[ $# -gt 0 ]]; do
         --no-build) SKIP_BUILD=1; shift ;;
         --no-download) SKIP_DOWNLOAD=1; shift ;;
         --with-mtp) WITH_MTP=1; shift ;;
+        --with-dspark) WITH_DSPARK=1; WITH_MTP=1; shift ;;
         --no-mtp) SKIP_MTP=1; shift ;;
         --no-smoke) SKIP_SMOKE=1; shift ;;
         --start) START_SERVER=1; shift ;;
@@ -110,6 +117,7 @@ done
 
 GGUF_PATH="$DS4_GGUF_DIR/$GGUF_FILE"
 MTP_PATH="$DS4_GGUF_DIR/$MTP_FILE"
+DSPARK_PATH="$DS4_GGUF_DIR/$DSPARK_FILE"
 
 c_red()   { printf '\033[31m%s\033[0m' "$*"; }
 c_green() { printf '\033[32m%s\033[0m' "$*"; }
@@ -283,15 +291,22 @@ start_server() {
     [[ "$START_SERVER" -eq 1 ]] || return
     [[ -f "$GGUF_PATH" ]] || die "$GGUF_PATH missing — cannot start server."
 
-    local mtp_args=""
-    if [[ "$WITH_MTP" -eq 1 ]] && [[ -f "$MTP_PATH" ]]; then
-        mtp_args="--mtp $MTP_PATH --mtp-draft 1"
-        log "Starting ds4-server with MTP support."
+    local mtp_args="" spec_env=""
+    if [[ "$WITH_DSPARK" -eq 1 ]]; then
+        [[ -f "$MTP_PATH" ]] || die "$MTP_PATH missing — --with-dspark needs the MTP GGUF."
+        [[ -f "$DSPARK_PATH" ]] || die "$DSPARK_PATH missing — build it with gguf-tools/dspark_extract.py (README: DSpark)."
+        mtp_args="--mtp $MTP_PATH"
+        spec_env="DS4_CONT_MTP_MODE=2 DS4_CONT_DSPARK=1 DS4_DSPARK_MODEL=$DSPARK_PATH"
+        log "Starting ds4-server with DSpark speculative decode (yield-quench + kv-gate ride the v0.1.1 defaults)."
+    elif [[ "$WITH_MTP" -eq 1 ]] && [[ -f "$MTP_PATH" ]]; then
+        mtp_args="--mtp $MTP_PATH"
+        spec_env="DS4_CONT_MTP_MODE=2"
+        log "Starting ds4-server with MTP-2 speculation (continuous batching)."
     else
-        log "Starting ds4-server (no MTP — benchmarks show no speedup on this hardware)."
+        log "Starting ds4-server (plain continuous decode; add --with-mtp or --with-dspark for speculation)."
     fi
 
-    nohup "$DS4_SRC_DIR/ds4-server" --cuda -m "$GGUF_PATH" \
+    env $spec_env nohup "$DS4_SRC_DIR/ds4-server" --cuda -m "$GGUF_PATH" \
         $mtp_args --port "$DS4_PORT" -c "$DS4_CTX" \
         > "$HOME/ds4-server.log" 2>&1 < /dev/null & disown
     local pid=$!
