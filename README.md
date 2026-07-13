@@ -1,21 +1,24 @@
 # ds4-on-spark
 
-**[`Entrpi/ds4`](https://github.com/Entrpi/ds4)** — our CUDA
-Blackwell-performance fork of [`antirez/ds4`](https://github.com/antirez/ds4)
-(DwarfStar 4) — serving DeepSeek-V4-Flash on a single NVIDIA DGX Spark
-(GB10 / SM121, 128 GiB unified memory), with measured benchmarks and a
-roofline analysis grounded in the hardware ceiling.
+This repo gets **[`Entrpi/ds4`](https://github.com/Entrpi/ds4)** — our
+DGX-Spark-optimized, major-feature fork of
+[`antirez/ds4`](https://github.com/antirez/ds4) (DwarfStar 4) — running on
+your Spark with one command, serving **DeepSeek-V4-Flash** entirely on-device
+(GB10 / SM121, 128 GiB unified memory; RTX PRO 6000 / 5090-class `sm_120`
+also builds).
 
-The fork is a **major performance upgrade over the upstream engine on
-Blackwell** (`sm_121` GB10 native, `sm_120` RTX PRO 6000 / 5090 class): **~2× upstream
-prefill on GB10** (~4× on an RTX PRO 6000), **1.15–1.68× upstream decode
-across the 2k–128k context frontier**, and a serving layer upstream doesn't
-have — continuous batching, a resident weight server, and DSpark lossless
-speculative decode (suite mean **1.38×** its own plain decode, net-positive
-per request by default). See
-[What the fork adds](#what-the-fork-adds-over-upstream) for the itemized
-delta. Upstream remains the architectural foundation and the model recipe —
-this repo simply pins and packages the fork.
+Compared to the upstream engine you get **double or more the prefill
+throughput** (2× on GB10, ~4× on a PRO 6000), **1.15–1.7× the decode speed
+across the full 2k–128k context range**, and a rich serving experience
+upstream doesn't have: **continuous batching**, **prefix caching** (warm
+start cuts time-to-first-token ~7× on shared prefixes, with fork-by-copy
+fan-out for parallel branches), and **DSpark lossless speculative decode** —
+together, a much faster multi-agent experience than single-stream serving.
+The [fork delta table](#what-the-fork-adds-over-upstream) itemizes exactly
+what changed and how each claim was measured; benchmarks, the roofline
+model, and the engineering story follow below. Upstream remains the
+architectural foundation and the model recipe — this repo pins and packages
+the fork.
 
 **Status:** Working end-to-end, pinned to the fork release
 [**`v0.1.1`**](https://github.com/Entrpi/ds4/blob/v0.1.1/CHANGELOG.md). On real
