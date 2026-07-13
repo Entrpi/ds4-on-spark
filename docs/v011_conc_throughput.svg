@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" width="1200" height="520" role="img" aria-label="Serving throughput vs concurrency">
+<style>
+  .bg { fill: #ffffff; }
+  .title { font: 600 17px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #1f2329; }
+  .subtitle { font: 12.5px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #566174; }
+  .axis-label { font: 11px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #566174; }
+  .legend { font: 12px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #1f2329; }
+  .callout { font: 700 12px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #4263eb; }
+  .regime { font: 600 11px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #8a93a3; }
+  .vlabel { font: 10.5px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; }
+  .grid { stroke: #eef0f3; stroke-width: 0.8; }
+  .axis { stroke: #c8ccd2; stroke-width: 1; }
+  .divider { stroke: #c8ccd2; stroke-width: 1; stroke-dasharray: 4 4; }
+  .line-agg { fill: none; stroke: #4263eb; stroke-width: 2.6; }
+  .line-req { fill: none; stroke: #2fa97a; stroke-width: 2.2; }
+  .batchband { fill: #4263eb; fill-opacity: 0.04; stroke: none; }
+</style>
+<rect class="bg" x="0" y="0" width="1200" height="520"/>
+<text class="title" x="600" y="30" text-anchor="middle">Served decode throughput vs concurrency — continuous batching at the ship default (GB10 Spark)</text>
+<text class="subtitle" x="600" y="52" text-anchor="middle">V4 Flash IQ2XXS · v0.1.1 (f58eaee) · ctx 69632 · benchy --concurrency, pp=2048 tg=256 per request, W&amp;P prose · non-streaming wall tok/s</text>
+<g transform="translate(330,72)">
+<line class="line-agg" x1="0" y1="8" x2="30" y2="8"/><text class="legend" x="38" y="12">aggregate decode tok/s (all requests)</text>
+<line class="line-req" x1="330" y1="8" x2="360" y2="8"/><text class="legend" x="368" y="12">per-request decode tok/s</text>
+</g>
+<line class="grid" x1="78" y1="424.0" x2="1172" y2="424.0"/>
+<text class="axis-label" x="70" y="427.0" text-anchor="end">0</text>
+<line class="grid" x1="78" y1="379.4" x2="1172" y2="379.4"/>
+<text class="axis-label" x="70" y="382.4" text-anchor="end">5</text>
+<line class="grid" x1="78" y1="334.9" x2="1172" y2="334.9"/>
+<text class="axis-label" x="70" y="337.9" text-anchor="end">10</text>
+<line class="grid" x1="78" y1="290.3" x2="1172" y2="290.3"/>
+<text class="axis-label" x="70" y="293.3" text-anchor="end">15</text>
+<line class="grid" x1="78" y1="245.7" x2="1172" y2="245.7"/>
+<text class="axis-label" x="70" y="248.7" text-anchor="end">20</text>
+<line class="grid" x1="78" y1="201.1" x2="1172" y2="201.1"/>
+<text class="axis-label" x="70" y="204.1" text-anchor="end">25</text>
+<line class="grid" x1="78" y1="156.6" x2="1172" y2="156.6"/>
+<text class="axis-label" x="70" y="159.6" text-anchor="end">30</text>
+<line class="grid" x1="78" y1="112.0" x2="1172" y2="112.0"/>
+<text class="axis-label" x="70" y="115.0" text-anchor="end">35</text>
+<line class="grid" x1="78.0" y1="112" x2="78.0" y2="424"/>
+<text class="axis-label" x="78.0" y="440" text-anchor="middle">1</text>
+<line class="grid" x1="351.5" y1="112" x2="351.5" y2="424"/>
+<text class="axis-label" x="351.5" y="440" text-anchor="middle">2</text>
+<line class="grid" x1="625.0" y1="112" x2="625.0" y2="424"/>
+<text class="axis-label" x="625.0" y="440" text-anchor="middle">4</text>
+<line class="grid" x1="898.5" y1="112" x2="898.5" y2="424"/>
+<text class="axis-label" x="898.5" y="440" text-anchor="middle">8</text>
+<line class="grid" x1="1172.0" y1="112" x2="1172.0" y2="424"/>
+<text class="axis-label" x="1172.0" y="440" text-anchor="middle">16</text>
+<line class="axis" x1="78" y1="112" x2="78" y2="424"/>
+<line class="axis" x1="78" y1="424" x2="1172" y2="424"/>
+<text class="axis-label" x="28" y="268.0" text-anchor="middle" transform="rotate(-90 28 268.0)">tok/s</text>
+<text class="axis-label" x="625" y="458" text-anchor="middle">concurrent requests</text>
+<rect class="batchband" x="214.8" y="112" width="957.2" height="312"/>
+<line class="divider" x1="214.8" y1="112" x2="214.8" y2="424"/>
+<text class="regime" x="78.0" y="128" text-anchor="middle">DSpark</text>
+<text class="regime" x="228.8" y="128">continuous batching (DSpark hands off at N&gt;1)</text>
+<polyline class="line-agg" points="78.0,263.0 351.5,211.0 625.0,164.0 898.5,159.1 1172.0,156.6"/>
+<circle cx="78.0" cy="263.0" r="3" fill="#4263eb"/>
+<text class="vlabel" style="fill:#4263eb" x="78.0" y="255.0" text-anchor="middle">18.1</text>
+<circle cx="351.5" cy="211.0" r="3" fill="#4263eb"/>
+<text class="vlabel" style="fill:#4263eb" x="351.5" y="203.0" text-anchor="middle">23.9</text>
+<circle cx="625.0" cy="164.0" r="3" fill="#4263eb"/>
+<text class="vlabel" style="fill:#4263eb" x="625.0" y="156.0" text-anchor="middle">29.2</text>
+<circle cx="898.5" cy="159.1" r="3" fill="#4263eb"/>
+<text class="vlabel" style="fill:#4263eb" x="898.5" y="151.1" text-anchor="middle">29.7</text>
+<circle cx="1172.0" cy="156.6" r="3" fill="#4263eb"/>
+<text class="vlabel" style="fill:#4263eb" x="1172.0" y="148.6" text-anchor="middle">30.0</text>
+<polyline class="line-req" points="78.0,263.0 351.5,297.1 625.0,356.2 898.5,381.4 1172.0,395.2"/>
+<circle cx="78.0" cy="263.0" r="3" fill="#2fa97a"/>
+<text class="vlabel" style="fill:#2fa97a" x="78.0" y="277.0" text-anchor="middle">18.1</text>
+<circle cx="351.5" cy="297.1" r="3" fill="#2fa97a"/>
+<text class="vlabel" style="fill:#2fa97a" x="351.5" y="311.1" text-anchor="middle">14.2</text>
+<circle cx="625.0" cy="356.2" r="3" fill="#2fa97a"/>
+<text class="vlabel" style="fill:#2fa97a" x="625.0" y="370.2" text-anchor="middle">7.6</text>
+<circle cx="898.5" cy="381.4" r="3" fill="#2fa97a"/>
+<text class="vlabel" style="fill:#2fa97a" x="898.5" y="395.4" text-anchor="middle">4.8</text>
+<circle cx="1172.0" cy="395.2" r="3" fill="#2fa97a"/>
+<text class="vlabel" style="fill:#2fa97a" x="1172.0" y="409.2" text-anchor="middle">3.2</text>
+<text class="callout" x="625.0" y="142.0" text-anchor="middle">aggregate saturates ≈ c=4 at ~30 tok/s (1.7× solo)</text>
+<text class="callout" style="fill:#2fa97a" x="88.0" y="324.2">solo: DSpark ≈ parity on this floor corpus;</text>
+<text class="callout" style="fill:#2fa97a" x="88.0" y="339.3">structured content reaches 27–35 (see decode chart)</text>
+<text class="subtitle" x="600" y="484" text-anchor="middle">c=1 serves with DSpark speculative decode (W&amp;P prose = adversarial floor, ~parity; suite mean 1.38x, best 1.71x) · c&gt;=2 runs plain continuous batching BY DESIGN — plain wins above N=1 on this hardware</text>
+<text class="subtitle" x="600" y="502" text-anchor="middle">run 2 of 2 (run 1 = warmup discard) · 16/16 served, 0 fallbacks, 0 serial-path markers · per-request tok/s measured over each request&#x27;s own generation window</text>
+</svg>

@@ -499,6 +499,21 @@ be the right call. DSpark speculation engages on solo streams (the default
 `DS4_DSPARK_MAX_NLIVE=1` regime) and hands concurrent traffic to plain
 batched decode, which wins above N=1 today.
 
+Measured at the ship default (v0.1.1, ctx 69632, pp=2048 tg=256 per request,
+W&P prose — the adversarial floor corpus for the solo point):
+
+![Served decode throughput vs concurrency at the ship default](docs/v011_conc_throughput.svg)
+
+Aggregate decode rises 18 → 30 tok/s and saturates around 4 concurrent
+requests; per-request throughput falls as requests share the machine
+(18.1 / 14.2 / 7.6 / 4.8 / 3.2 tok/s at c = 1/2/4/8/16, each measured over
+that request's own generation window). Note the c=1 point runs DSpark on the
+floor corpus, i.e. ≈ parity — on structured content a solo stream reaches
+27–35 tok/s (see the [decode chart](docs/v011_decode_overlay.svg)), which is
+comparable to the whole box's batched aggregate. That is the practical
+guidance: a single agent gets DSpark speeds; a fleet gets ~30 tok/s of
+aggregate decode plus the prefix-cache TTFT wins.
+
 ## MTP (speculative decode) — the June analysis, and how it resolved
 
 > **Postscript (2026-07-13):** this section's closing prediction — *"the path
