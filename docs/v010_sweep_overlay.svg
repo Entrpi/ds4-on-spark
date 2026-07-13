@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="1200" height="760" role="img" aria-label="ds4 v0.1.0 sweep overlay">
+<style>
+  .bg { fill: #ffffff; }
+  .title    { font: 600 17px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #1f2329; }
+  .subtitle { font: 12.5px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #566174; }
+  .panel-title { font: 600 14px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #1f2329; }
+  .note     { font: 10.5px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #9aa3b0; }
+  .axis-label  { font: 11px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #566174; }
+  .legend      { font: 12px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #1f2329; }
+  .callout     { font: 700 12px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #1f8a5a; }
+  .callout-bad { font: 700 12px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #c0392b; }
+  .grid { stroke: #eef0f3; stroke-width: 0.8; }
+  .axis { stroke: #c8ccd2; stroke-width: 1; }
+  .line-upstream { fill: none; stroke: #7a8497; stroke-width: 2; }
+  .line-fork     { fill: none; stroke: #2fa97a; stroke-width: 2.4; }
+  .dot-upstream  { fill: #7a8497; }
+  .dot-fork      { fill: #2fa97a; }
+  .gain { fill: #2fa97a; fill-opacity: 0.18; stroke: none; }
+  .loss { fill: #d64545; fill-opacity: 0.16; stroke: none; }
+  .probe { stroke: #7a8497; stroke-width: 2; fill: none; }
+</style>
+<rect class="bg" x="0" y="0" width="1200" height="760"/>
+<text class="title" x="600" y="30" text-anchor="middle">Throughput across context frontiers: upstream antirez/ds4 main vs v0.1.0 branch</text>
+<text class="subtitle" x="600" y="52" text-anchor="middle">V4 Flash IQ2XXS · llama-benchy sweep, depth 2k–64k step 2k + 64k–128k step 8k, pp=2048 tg=128 · corpus: War and Peace · green = gain</text>
+<g transform="translate(300,66)">
+<line class="line-upstream" x1="0" y1="8" x2="32" y2="8"/>
+<text class="legend" x="40" y="12">upstream antirez/ds4 main  (80ebbc3)</text>
+<line class="line-fork" x1="300" y1="8" x2="332" y2="8"/>
+<text class="legend" x="340" y="12">this branch — v0.1.0  (63d9d5e)</text>
+</g>
+<text class="panel-title" x="336" y="118" text-anchor="middle">RTX PRO 6000 Blackwell — prefill</text>
+<text class="note" x="336" y="133" text-anchor="middle">branch: serial, no MTP, ends 64k (96 GB fit)</text>
+<line class="grid" x1="78" y1="370.0" x2="595" y2="370.0"/>
+<text class="axis-label" x="70" y="373.0" text-anchor="end">0</text>
+<line class="grid" x1="78" y1="322.0" x2="595" y2="322.0"/>
+<text class="axis-label" x="70" y="325.0" text-anchor="end">500</text>
+<line class="grid" x1="78" y1="274.0" x2="595" y2="274.0"/>
+<text class="axis-label" x="70" y="277.0" text-anchor="end">1000</text>
+<line class="grid" x1="78" y1="226.0" x2="595" y2="226.0"/>
+<text class="axis-label" x="70" y="229.0" text-anchor="end">1500</text>
+<line class="grid" x1="78" y1="178.0" x2="595" y2="178.0"/>
+<text class="axis-label" x="70" y="181.0" text-anchor="end">2000</text>
+<line class="grid" x1="78" y1="130.0" x2="595" y2="130.0"/>
+<text class="axis-label" x="70" y="133.0" text-anchor="end">2500</text>
+<line class="grid" x1="78.0" y1="130" x2="78.0" y2="370"/>
+<text class="axis-label" x="78.0" y="386" text-anchor="middle">2k</text>
+<line class="grid" x1="201.1" y1="130" x2="201.1" y2="370"/>
+<text class="axis-label" x="201.1" y="386" text-anchor="middle">32k</text>
+<line class="grid" x1="332.4" y1="130" x2="332.4" y2="370"/>
+<text class="axis-label" x="332.4" y="386" text-anchor="middle">64k</text>
+<line class="grid" x1="463.7" y1="130" x2="463.7" y2="370"/>
+<text class="axis-label" x="463.7" y="386" text-anchor="middle">96k</text>
+<line class="grid" x1="595.0" y1="130" x2="595.0" y2="370"/>
+<text class="axis-label" x="595.0" y="386" text-anchor="middle">128k</text>
+<line class="axis" x1="78" y1="130" x2="78" y2="370"/>
+<line class="axis" x1="78" y1="370" x2="595" y2="370"/>
+<text class="axis-label" x="26" y="250.0" text-anchor="middle" transform="rotate(-90 26 250.0)">tok/s</text>
+<text class="axis-label" x="336" y="404" text-anchor="middle">context depth (tokens)</text>
+<polygon class="gain" points="78.0,189.6 86.2,223.3 94.4,187.9 102.6,211.1 110.8,185.9 119.0,187.4 127.2,186.3 135.4,202.9 143.7,190.2 151.9,201.5 160.1,189.2 168.3,201.1 176.5,191.7 184.7,200.7 192.9,193.1 201.1,193.3 209.3,194.8 217.5,204.0 225.7,195.0 233.9,203.8 242.1,197.7 250.3,198.3 258.5,200.0 266.7,200.5 275.0,202.3 283.2,202.4 291.4,205.0 299.6,210.0 307.8,204.9 316.0,210.1 324.2,206.3 332.4,210.9 332.4,327.8 324.2,327.8 316.0,328.0 307.8,327.7 299.6,328.0 291.4,327.5 283.2,327.8 275.0,327.3 266.7,327.6 258.5,327.3 250.3,327.5 242.1,327.1 233.9,327.4 225.7,326.9 217.5,326.8 209.3,326.7 201.1,326.7 192.9,326.6 184.7,326.5 176.5,326.4 168.3,326.4 160.1,326.4 151.9,326.3 143.7,326.3 135.4,327.1 127.2,326.1 119.0,325.9 110.8,326.0 102.6,326.0 94.4,325.9 86.2,328.3 78.0,325.8"/>
+<polyline class="line-upstream" points="78.0,325.8 86.2,328.3 94.4,325.9 102.6,326.0 110.8,326.0 119.0,325.9 127.2,326.1 135.4,327.1 143.7,326.3 151.9,326.3 160.1,326.4 168.3,326.4 176.5,326.4 184.7,326.5 192.9,326.6 201.1,326.7 209.3,326.7 217.5,326.8 225.7,326.9 233.9,327.4 242.1,327.1 250.3,327.5 258.5,327.3 266.7,327.6 275.0,327.3 283.2,327.8 291.4,327.5 299.6,328.0 307.8,327.7 316.0,328.0 324.2,327.8 332.4,327.8 365.2,328.4 398.0,328.6 430.9,328.8 463.7,329.1 496.5,329.3 529.3,329.3 562.2,329.8 595.0,330.0"/>
+<circle class="dot-upstream" cx="78.0" cy="325.8" r="3"/>
+<polyline class="line-fork" points="78.0,189.6 86.2,223.3 94.4,187.9 102.6,211.1 110.8,185.9 119.0,187.4 127.2,186.3 135.4,202.9 143.7,190.2 151.9,201.5 160.1,189.2 168.3,201.1 176.5,191.7 184.7,200.7 192.9,193.1 201.1,193.3 209.3,194.8 217.5,204.0 225.7,195.0 233.9,203.8 242.1,197.7 250.3,198.3 258.5,200.0 266.7,200.5 275.0,202.3 283.2,202.4 291.4,205.0 299.6,210.0 307.8,204.9 316.0,210.1 324.2,206.3 332.4,210.9"/>
+<circle class="dot-fork" cx="78.0" cy="189.6" r="3"/>
+<text class="callout" x="86.0" y="183.6">4.08× @ 2k</text>
+<text class="callout" x="324.4" y="204.9" text-anchor="end">3.77× @ 64k</text>
+<text class="panel-title" x="914" y="118" text-anchor="middle">RTX PRO 6000 Blackwell — generation</text>
+<text class="note" x="914" y="133" text-anchor="middle">upstream client line invalid (token-count artifact) · × = upstream engine probe</text>
+<line class="grid" x1="655" y1="370.0" x2="1172" y2="370.0"/>
+<text class="axis-label" x="647" y="373.0" text-anchor="end">0</text>
+<line class="grid" x1="655" y1="322.0" x2="1172" y2="322.0"/>
+<text class="axis-label" x="647" y="325.0" text-anchor="end">20</text>
+<line class="grid" x1="655" y1="274.0" x2="1172" y2="274.0"/>
+<text class="axis-label" x="647" y="277.0" text-anchor="end">40</text>
+<line class="grid" x1="655" y1="226.0" x2="1172" y2="226.0"/>
+<text class="axis-label" x="647" y="229.0" text-anchor="end">60</text>
+<line class="grid" x1="655" y1="178.0" x2="1172" y2="178.0"/>
+<text class="axis-label" x="647" y="181.0" text-anchor="end">80</text>
+<line class="grid" x1="655" y1="130.0" x2="1172" y2="130.0"/>
+<text class="axis-label" x="647" y="133.0" text-anchor="end">100</text>
+<line class="grid" x1="655.0" y1="130" x2="655.0" y2="370"/>
+<text class="axis-label" x="655.0" y="386" text-anchor="middle">2k</text>
+<line class="grid" x1="778.1" y1="130" x2="778.1" y2="370"/>
+<text class="axis-label" x="778.1" y="386" text-anchor="middle">32k</text>
+<line class="grid" x1="909.4" y1="130" x2="909.4" y2="370"/>
+<text class="axis-label" x="909.4" y="386" text-anchor="middle">64k</text>
+<line class="grid" x1="1040.7" y1="130" x2="1040.7" y2="370"/>
+<text class="axis-label" x="1040.7" y="386" text-anchor="middle">96k</text>
+<line class="grid" x1="1172.0" y1="130" x2="1172.0" y2="370"/>
+<text class="axis-label" x="1172.0" y="386" text-anchor="middle">128k</text>
+<line class="axis" x1="655" y1="130" x2="655" y2="370"/>
+<line class="axis" x1="655" y1="370" x2="1172" y2="370"/>
+<text class="axis-label" x="603" y="250.0" text-anchor="middle" transform="rotate(-90 603 250.0)">tok/s</text>
+<text class="axis-label" x="914" y="404" text-anchor="middle">context depth (tokens)</text>
+<polyline class="line-fork" points="655.0,245.9 663.2,246.1 671.4,247.4 679.6,247.5 687.8,248.2 696.0,249.8 704.2,249.6 712.4,251.2 720.7,250.6 728.9,251.7 737.1,250.9 745.3,252.6 753.5,252.8 761.7,253.3 769.9,253.9 778.1,253.5 786.3,254.9 794.5,255.3 802.7,255.5 810.9,256.2 819.1,255.7 827.3,257.1 835.5,257.4 843.7,257.9 852.0,258.5 860.2,259.2 868.4,259.6 876.6,260.4 884.8,260.7 893.0,261.5 901.2,261.8 909.4,263.3"/>
+<circle class="dot-fork" cx="655.0" cy="245.9" r="3"/>
+<path class="probe" d="M683.8,285.4 L691.8,293.4 M683.8,293.4 L691.8,285.4"/>
+<text class="note" x="695.8" y="283.4">33.6 t/s @12k kv (engine)</text>
+<text class="panel-title" x="336" y="428" text-anchor="middle">GB10 Spark — prefill</text>
+<text class="note" x="336" y="443" text-anchor="middle">branch: ship config ≤64k · 139k-fit config &gt;64k (equal at overlap)</text>
+<line class="grid" x1="78" y1="680.0" x2="595" y2="680.0"/>
+<text class="axis-label" x="70" y="683.0" text-anchor="end">0</text>
+<line class="grid" x1="78" y1="632.0" x2="595" y2="632.0"/>
+<text class="axis-label" x="70" y="635.0" text-anchor="end">200</text>
+<line class="grid" x1="78" y1="584.0" x2="595" y2="584.0"/>
+<text class="axis-label" x="70" y="587.0" text-anchor="end">400</text>
+<line class="grid" x1="78" y1="536.0" x2="595" y2="536.0"/>
+<text class="axis-label" x="70" y="539.0" text-anchor="end">600</text>
+<line class="grid" x1="78" y1="488.0" x2="595" y2="488.0"/>
+<text class="axis-label" x="70" y="491.0" text-anchor="end">800</text>
+<line class="grid" x1="78" y1="440.0" x2="595" y2="440.0"/>
+<text class="axis-label" x="70" y="443.0" text-anchor="end">1000</text>
+<line class="grid" x1="78.0" y1="440" x2="78.0" y2="680"/>
+<text class="axis-label" x="78.0" y="696" text-anchor="middle">2k</text>
+<line class="grid" x1="201.1" y1="440" x2="201.1" y2="680"/>
+<text class="axis-label" x="201.1" y="696" text-anchor="middle">32k</text>
+<line class="grid" x1="332.4" y1="440" x2="332.4" y2="680"/>
+<text class="axis-label" x="332.4" y="696" text-anchor="middle">64k</text>
+<line class="grid" x1="463.7" y1="440" x2="463.7" y2="680"/>
+<text class="axis-label" x="463.7" y="696" text-anchor="middle">96k</text>
+<line class="grid" x1="595.0" y1="440" x2="595.0" y2="680"/>
+<text class="axis-label" x="595.0" y="696" text-anchor="middle">128k</text>
+<line class="axis" x1="78" y1="440" x2="78" y2="680"/>
+<line class="axis" x1="78" y1="680" x2="595" y2="680"/>
+<text class="axis-label" x="26" y="560.0" text-anchor="middle" transform="rotate(-90 26 560.0)">tok/s</text>
+<text class="axis-label" x="336" y="714" text-anchor="middle">context depth (tokens)</text>
+<polygon class="gain" points="78.0,489.2 86.2,497.8 94.4,489.9 110.8,482.5 119.0,482.8 127.2,485.3 135.4,493.0 143.7,488.3 151.9,493.2 160.1,490.8 168.3,494.8 176.5,492.3 184.7,497.1 192.9,495.6 201.1,499.4 209.3,499.1 217.5,502.5 225.7,501.4 233.9,505.8 242.1,505.2 250.3,505.8 258.5,507.1 266.7,509.8 275.0,509.8 283.2,512.8 291.4,513.0 299.6,515.8 307.8,515.8 316.0,517.5 324.2,517.7 332.4,519.8 365.2,524.4 398.0,528.4 430.9,532.0 463.7,535.1 496.5,538.4 529.3,541.4 562.2,544.8 595.0,547.9 595.0,609.3 562.2,608.6 529.3,607.1 496.5,606.0 463.7,605.2 430.9,603.2 398.0,602.6 365.2,600.0 332.4,598.5 324.2,598.4 316.0,598.9 307.8,597.5 299.6,598.1 291.4,596.6 283.2,597.2 275.0,596.0 266.7,596.3 258.5,594.7 250.3,595.3 242.1,594.5 233.9,594.1 225.7,593.5 217.5,593.6 209.3,592.2 201.1,592.3 192.9,590.8 184.7,591.5 176.5,590.3 168.3,590.3 160.1,589.0 151.9,589.1 143.7,588.6 135.4,589.4 127.2,587.1 119.0,586.5 110.8,585.9 94.4,585.9 86.2,588.2 78.0,584.3"/>
+<polyline class="line-upstream" points="78.0,584.3 86.2,588.2 94.4,585.9 102.6,587.9 110.8,585.9 119.0,586.5 127.2,587.1 135.4,589.4 143.7,588.6 151.9,589.1 160.1,589.0 168.3,590.3 176.5,590.3 184.7,591.5 192.9,590.8 201.1,592.3 209.3,592.2 217.5,593.6 225.7,593.5 233.9,594.1 242.1,594.5 250.3,595.3 258.5,594.7 266.7,596.3 275.0,596.0 283.2,597.2 291.4,596.6 299.6,598.1 307.8,597.5 316.0,598.9 324.2,598.4 332.4,598.5 365.2,600.0 398.0,602.6 430.9,603.2 463.7,605.2 496.5,606.0 529.3,607.1 562.2,608.6 595.0,609.3"/>
+<circle class="dot-upstream" cx="78.0" cy="584.3" r="3"/>
+<polyline class="line-fork" points="78.0,489.2 86.2,497.8 94.4,489.9 110.8,482.5 119.0,482.8 127.2,485.3 135.4,493.0 143.7,488.3 151.9,493.2 160.1,490.8 168.3,494.8 176.5,492.3 184.7,497.1 192.9,495.6 201.1,499.4 209.3,499.1 217.5,502.5 225.7,501.4 233.9,505.8 242.1,505.2 250.3,505.8 258.5,507.1 266.7,509.8 275.0,509.8 283.2,512.8 291.4,513.0 299.6,515.8 307.8,515.8 316.0,517.5 324.2,517.7 332.4,519.8 365.2,524.4 398.0,528.4 430.9,532.0 463.7,535.1 496.5,538.4 529.3,541.4 562.2,544.8 595.0,547.9"/>
+<circle class="dot-fork" cx="78.0" cy="489.2" r="3"/>
+<text class="callout" x="86.0" y="483.2">1.99× @ 2k</text>
+<text class="callout" x="340.4" y="513.8">1.97× @ 64k</text>
+<text class="callout" x="587.0" y="541.9" text-anchor="end">1.87× @ 128k</text>
+<text class="panel-title" x="914" y="428" text-anchor="middle">GB10 Spark — generation</text>
+<text class="note" x="914" y="443" text-anchor="middle">engine-measured decode rate, both lines (server-side)</text>
+<line class="grid" x1="655" y1="680.0" x2="1172" y2="680.0"/>
+<text class="axis-label" x="647" y="683.0" text-anchor="end">0</text>
+<line class="grid" x1="655" y1="632.0" x2="1172" y2="632.0"/>
+<text class="axis-label" x="647" y="635.0" text-anchor="end">4</text>
+<line class="grid" x1="655" y1="584.0" x2="1172" y2="584.0"/>
+<text class="axis-label" x="647" y="587.0" text-anchor="end">8</text>
+<line class="grid" x1="655" y1="536.0" x2="1172" y2="536.0"/>
+<text class="axis-label" x="647" y="539.0" text-anchor="end">12</text>
+<line class="grid" x1="655" y1="488.0" x2="1172" y2="488.0"/>
+<text class="axis-label" x="647" y="491.0" text-anchor="end">16</text>
+<line class="grid" x1="655" y1="440.0" x2="1172" y2="440.0"/>
+<text class="axis-label" x="647" y="443.0" text-anchor="end">20</text>
+<line class="grid" x1="655.0" y1="440" x2="655.0" y2="680"/>
+<text class="axis-label" x="655.0" y="696" text-anchor="middle">2k</text>
+<line class="grid" x1="778.1" y1="440" x2="778.1" y2="680"/>
+<text class="axis-label" x="778.1" y="696" text-anchor="middle">32k</text>
+<line class="grid" x1="909.4" y1="440" x2="909.4" y2="680"/>
+<text class="axis-label" x="909.4" y="696" text-anchor="middle">64k</text>
+<line class="grid" x1="1040.7" y1="440" x2="1040.7" y2="680"/>
+<text class="axis-label" x="1040.7" y="696" text-anchor="middle">96k</text>
+<line class="grid" x1="1172.0" y1="440" x2="1172.0" y2="680"/>
+<text class="axis-label" x="1172.0" y="696" text-anchor="middle">128k</text>
+<line class="axis" x1="655" y1="440" x2="655" y2="680"/>
+<line class="axis" x1="655" y1="680" x2="1172" y2="680"/>
+<text class="axis-label" x="603" y="560.0" text-anchor="middle" transform="rotate(-90 603 560.0)">tok/s</text>
+<text class="axis-label" x="914" y="714" text-anchor="middle">context depth (tokens)</text>
+<polygon class="gain" points="655.0,469.3 663.2,471.3 671.4,472.9 687.8,475.0 696.0,476.5 704.2,477.8 712.4,478.9 720.7,480.2 728.9,481.3 737.1,482.5 745.3,483.9 753.5,486.2 761.7,488.0 769.9,490.4 778.1,491.4 786.3,492.3 794.5,493.0 802.7,493.8 810.9,494.5 819.1,495.1 827.3,496.2 835.5,496.9 843.7,498.0 852.0,499.3 860.2,500.4 868.4,501.3 876.6,502.9 884.8,504.3 893.0,505.3 901.2,507.2 909.4,508.0 942.2,513.3 975.0,516.6 1007.9,520.0 1040.7,524.1 1073.5,525.9 1106.3,528.6 1139.2,531.8 1172.0,534.9 1172.0,557.1 1139.2,553.4 1106.3,551.7 1073.5,549.9 1040.7,547.9 1007.9,546.0 975.0,543.8 942.2,541.0 909.4,539.5 901.2,539.0 893.0,538.3 884.8,537.7 876.6,537.0 868.4,535.8 860.2,535.6 852.0,534.4 843.7,534.1 835.5,533.2 827.3,532.9 819.1,532.0 810.9,531.6 802.7,531.0 794.5,530.1 786.3,530.0 778.1,529.2 769.9,529.0 761.7,524.2 753.5,523.4 745.3,522.2 737.1,521.5 728.9,520.4 720.7,519.6 712.4,518.8 704.2,518.0 696.0,518.2 687.8,517.4 671.4,515.7 663.2,513.7 655.0,513.0"/>
+<polyline class="line-upstream" points="655.0,513.0 663.2,513.7 671.4,515.7 679.6,516.4 687.8,517.4 696.0,518.2 704.2,518.0 712.4,518.8 720.7,519.6 728.9,520.4 737.1,521.5 745.3,522.2 753.5,523.4 761.7,524.2 769.9,529.0 778.1,529.2 786.3,530.0 794.5,530.1 802.7,531.0 810.9,531.6 819.1,532.0 827.3,532.9 835.5,533.2 843.7,534.1 852.0,534.4 860.2,535.6 868.4,535.8 876.6,537.0 884.8,537.7 893.0,538.3 901.2,539.0 909.4,539.5 942.2,541.0 975.0,543.8 1007.9,546.0 1040.7,547.9 1073.5,549.9 1106.3,551.7 1139.2,553.4 1172.0,557.1"/>
+<circle class="dot-upstream" cx="655.0" cy="513.0" r="3"/>
+<polyline class="line-fork" points="655.0,469.3 663.2,471.3 671.4,472.9 687.8,475.0 696.0,476.5 704.2,477.8 712.4,478.9 720.7,480.2 728.9,481.3 737.1,482.5 745.3,483.9 753.5,486.2 761.7,488.0 769.9,490.4 778.1,491.4 786.3,492.3 794.5,493.0 802.7,493.8 810.9,494.5 819.1,495.1 827.3,496.2 835.5,496.9 843.7,498.0 852.0,499.3 860.2,500.4 868.4,501.3 876.6,502.9 884.8,504.3 893.0,505.3 901.2,507.2 909.4,508.0 942.2,513.3 975.0,516.6 1007.9,520.0 1040.7,524.1 1073.5,525.9 1106.3,528.6 1139.2,531.8 1172.0,534.9"/>
+<circle class="dot-fork" cx="655.0" cy="469.3" r="3"/>
+<text class="callout" x="663.0" y="463.3">+26% @ 2k</text>
+<text class="callout" x="917.4" y="502.0">+22% @ 64k</text>
+<text class="callout" x="1164.0" y="528.9" text-anchor="end">+18% @ 128k</text>
+<text class="subtitle" x="600" y="728" text-anchor="middle">Source: llama-benchy 4a8e47e, 1 run/point, --no-cache · prefill panels client-measured (usage-based, valid both lines) · branch spec-decode OFF (ship: 3.02 tok/step DSpark) · 2026-07-10</text>
+<text class="subtitle" x="600" y="746" text-anchor="middle">Gen: upstream serves no per-delta token_ids -&gt; client fragment-retokenization over-counts ~1.94x; GB10 gen uses server-side engine rates for both lines; PRO upstream gen lost with the pod · PRO upstream boot: DS4_CUDA_COPY_MODEL=1 (default host-maps over PCIe: 8.9 t/s)</text>
+</svg>

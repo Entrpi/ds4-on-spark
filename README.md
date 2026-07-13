@@ -20,6 +20,19 @@ model, and the engineering story follow below. Upstream remains the
 architectural foundation and the model recipe — this repo pins and packages
 the fork.
 
+**Prefill and decode vs upstream, across the context frontier** (upstream
+`main` measured on the same box, same GGUF; spec-decode off in this
+comparison — it only widens the gap):
+
+![Throughput across context frontiers: upstream antirez/ds4 main vs the fork](docs/v010_sweep_overlay.svg)
+
+**Decode at the ship config** (DSpark + yield-quench + kv-gate) — solid line
+is the adversarial-prose floor test, dashed is code continuation; the fork
+wins 1.15–1.68× over upstream everywhere while never dropping below ~0.96×
+its own plain decode:
+
+![Ship decode across context frontiers: plain vs DSpark with quench and kv-gate, two corpora](docs/v011_decode_overlay.svg)
+
 **Status:** Working end-to-end, pinned to the fork release
 [**`v0.1.1`**](https://github.com/Entrpi/ds4/blob/v0.1.1/CHANGELOG.md). On real
 workloads, **DSpark lossless speculative decode reaches a suite mean of ~28 t/s
