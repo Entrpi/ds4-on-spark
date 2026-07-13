@@ -4,8 +4,8 @@ This repo gets **[`Entrpi/ds4`](https://github.com/Entrpi/ds4)** — our
 DGX-Spark-optimized, major-feature fork of
 [`antirez/ds4`](https://github.com/antirez/ds4) (DwarfStar 4) — running on
 your Spark with one command, serving **DeepSeek-V4-Flash** entirely on-device
-(GB10 / SM121, 128 GiB unified memory; RTX PRO 6000 / 5090-class `sm_120`
-also builds).
+(GB10 / SM121, 128 GB unified memory — ~119 GiB usable; RTX PRO 6000 /
+5090-class `sm_120` also builds).
 
 Compared to the upstream engine you get **double or more the prefill
 throughput** (2× on GB10, ~4× on a PRO 6000), **1.15–1.7× the decode speed
@@ -37,7 +37,7 @@ engine on GB10 (D2R tensor-core MoE GEMMs). The Metal backend is unaffected.
 
 - **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine (CUDA backend landed 2026-05-11; the architecture writeup below uses HEAD `920f987`). **This repo pins the [`Entrpi/ds4`](https://github.com/Entrpi/ds4) fork at release [`v0.1.1`](https://github.com/Entrpi/ds4/blob/v0.1.1/CHANGELOG.md)** (2026-07-13): the batched-serving line — D2R tensor-core prefill, per-layer CUDA-graph decode capture, continuous batching, weight server, DSpark speculative decode with terminal yield quench (default on) + kv-depth gate. The fork `CHANGELOG.md` documents every fork-side change; older sections of this README that analyze May/June snapshots are marked as historical where superseded.
 - **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf) — 81 GiB asymmetric quant: IQ2_XXS for routed-expert gate/up, Q2_K for routed-expert down (these dominate model bytes), Q8_0 for everything else dense (shared expert, attention projections, output head, router), F16 for LoRA matrices and the compressor/indexer, F32 norms. (FP8 in ds4 is a *runtime* KV-cache quantization — E4M3FN round-trip — not a stored weight format.) Plus an optional 3.6 GiB MTP draft GGUF.
-- **Hardware:** NVIDIA DGX Spark, GB10, SM121, 128 GiB LPDDR5X unified. The donor's `Makefile` has a `make cuda-spark` target that builds native `sm_121`, plus `make cuda CUDA_ARCH=sm_NNN` for an explicit override — both GB10-correct with no patches needed. (Building with an empty `-arch` measured ~25% slower prefill on GB10, so the explicit arch matters.)
+- **Hardware:** NVIDIA DGX Spark, GB10, SM121, 128 GB LPDDR5X unified (~119 GiB usable). The donor's `Makefile` has a `make cuda-spark` target that builds native `sm_121`, plus `make cuda CUDA_ARCH=sm_NNN` for an explicit override — both GB10-correct with no patches needed. (Building with an empty `-arch` measured ~25% slower prefill on GB10, so the explicit arch matters.)
 
 ## What the fork adds over upstream
 
@@ -129,12 +129,12 @@ What happens to an existing setup:
 
 | | |
 |---|---|
-| Validated on | NVIDIA DGX Spark (GB10, SM121, 128 GiB unified) |
+| Validated on | NVIDIA DGX Spark (GB10, SM121, 128 GB / ~119 GiB unified) |
 | Likely to work | RTX PRO 6000 / 5090-class Blackwell with `--cuda-arch sm_120` (PRO 6000 prefill measured); `sm_100` datacenter untested |
 | CUDA toolkit | 13.x (we tested 13.0.88) |
 | Disk | ≥110 GiB free for the GGUFs |
 | OS | aarch64 Linux (Grace) |
-| RAM (system, unified) | 128 GiB is enough for the model + ~250 MB KV @ 16k context |
+| RAM (system, unified) | 128 GB (~119 GiB usable) is enough for the model + ~250 MB KV @ 16k context |
 
 GB10 is detected via `nvidia-smi --query-gpu=compute_cap` returning `12.1`.
 Anything else gets a warning + `--force` override path.
