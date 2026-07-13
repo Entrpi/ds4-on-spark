@@ -28,29 +28,26 @@ engine on GB10 (D2R tensor-core MoE GEMMs). The Metal backend is unaffected.
 On a DGX Spark with CUDA 13 installed:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/entrpi/ds4-on-spark/main/install.sh | bash -s -- --with-mtp --start
+curl -sSL https://raw.githubusercontent.com/entrpi/ds4-on-spark/main/install.sh | bash -s -- --start
 ```
 
 That one command:
 
-1. Verifies the host (aarch64, GB10/SM121, CUDA 13, ≥110 GiB free disk).
+1. Verifies the host (aarch64, GB10/SM121, CUDA 13, ≥120 GiB free disk).
 2. Clones the `Entrpi/ds4` fork at tag **`v0.1.1`** into `~/code/ds4` (or `$DS4_SRC_DIR`).
 3. Builds `ds4`, `ds4-server`, `ds4-bench` with `CUDA_ARCH=sm_121` in ~8 s.
-4. Downloads the Q2 GGUF (~81 GiB) and the MTP GGUF (~3.6 GiB) from
-   `antirez/deepseek-v4-gguf` into `~/gguf` (or `$DS4_GGUF_DIR`).
+4. Downloads the Q2 GGUF (~81 GiB) + MTP GGUF (~3.6 GiB) from
+   [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf)
+   and the DSpark Q2K drafter (~6.5 GiB) from
+   [`bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF`](https://huggingface.co/bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF)
+   into `~/gguf` (or `$DS4_GGUF_DIR`).
 5. Runs the "capital of France" smoke test and asserts "Paris" in the output.
-6. Starts `ds4-server` on `:8000` with `-c 32768`, continuous batching on,
-   MTP-2 speculation active (a modest ~1.08× over plain).
+6. Starts `ds4-server` on `:8000` with `-c 32768` serving the **full DSpark
+   speculative stack** — lossless, suite mean **1.38× plain decode**, with the
+   yield-quench controller and kv-depth gate riding the v0.1.1 defaults.
 
-For the full **DSpark** speculative stack (suite mean 1.38× plain, the
-featured numbers), build the ~6.5 GiB Q2K drafter GGUF once with
-[`gguf-tools/dspark_extract.py`](https://github.com/Entrpi/ds4/blob/v0.1.1/gguf-tools/dspark_extract.py)
-(see [DSpark: the featured serving mode](#dspark-the-featured-serving-mode)),
-drop it in `$DS4_GGUF_DIR`, and start with:
-
-```bash
-./install.sh --start --with-dspark
-```
+`--no-dspark` serves plain continuous decode instead (skips the drafter
+download); `--with-mtp` alone gives MTP-2 speculation (a modest ~1.08×).
 
 To preview without running:
 
@@ -61,6 +58,35 @@ curl -sSL https://raw.githubusercontent.com/entrpi/ds4-on-spark/main/install.sh 
 Common overrides: `--cuda-arch sm_120` (datacenter Blackwell), `--no-download`
 (reuse existing GGUF), `--src-dir`, `--gguf-dir`, `--ctx`, `--port`, `--force`
 (skip host check).
+
+## Upgrading from an earlier install
+
+Re-run the installer — every step is idempotent:
+
+```bash
+pkill -x ds4-server   # the installer starts servers but never stops old ones
+curl -sSL https://raw.githubusercontent.com/entrpi/ds4-on-spark/main/install.sh | bash -s -- --start
+```
+
+What happens to an existing setup:
+
+- **Your ds4 clone fast-forwards to the `v0.1.1` tag** (`git fetch` +
+  `reset --hard`, remote repointed automatically if you installed back when
+  this repo cloned `antirez/ds4`). Any local edits in that clone are
+  **discarded** — it's an installer-managed tree.
+- **GGUFs you already have are kept** (size-checked, not re-downloaded). Two
+  new downloads happen on upgrade: the DSpark drafter (~6.5 GiB) and — if you
+  installed before 2026-07-13 — the **imatrix base quant** (~81 GiB): the old
+  installer default pointed at the plain `chat-v2.gguf` while the quality
+  baselines were all measured on `chat-v2-imatrix.gguf`; the default now
+  matches the validated build. To keep serving your existing non-imatrix
+  file instead (and skip the 81 GiB):
+  `GGUF_FILE=DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf ./install.sh --start`
+- **The default serve mode changes** from plain decode to the DSpark
+  speculative stack (same OpenAI-compatible API, lossless output, ~10 GiB
+  more unified memory in use). `--no-dspark` restores the old behaviour.
+- If a rebuild ever looks wrong after a big jump, `make -C ~/code/ds4 clean`
+  and re-run.
 
 ## Hardware requirements
 
@@ -155,21 +181,23 @@ parameters were calibrated offline against per-step traces
 (`DS4_DSPARK_TRACE=1` + `tools/dspark_trace_replay.py` in the fork) and the
 in-engine controller is validated to reproduce the offline policy exactly.
 
-### Setting up the drafter
+### The drafter artifact
 
-The drafter is a ~6.5 GiB Q2K GGUF built once from the published drafter
-shards with the fork's extraction tool:
+The installer downloads the prebuilt ~6.5 GiB Q2K drafter from
+[`bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF`](https://huggingface.co/bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF)
+by default. Q2K routed experts are the ship default (equal throughput and
+acceptance to Q4K in A/B, 4.2 GiB smaller). To build a drafter yourself from
+the official checkpoint's drafter shards (e.g. the Q4K-expert variant), use
+the fork's extraction tool:
 
 ```bash
 cd ~/code/ds4
 python3 gguf-tools/dspark_extract.py --src <dir-with-drafter-shards> \
-    --out ~/gguf/DSpark-drafter-Q2K-Q8.gguf --validate --experts q8_0
+    --out ~/gguf/DSpark-drafter-Q4K-Q8.gguf --validate --experts q4_k
 ```
 
-Then `./install.sh --start --with-dspark` serves the full stack. Q2K is the
-ship default (equal throughput and acceptance to Q4K in A/B, 4.2 GiB
-smaller). Kill switches if you ever need them: `DS4_DSPARK_QUENCH=0`
-(always-spec below the gate), `DS4_CONT_DSPARK` unset (no DSpark).
+Kill switches if you ever need them: `DS4_DSPARK_QUENCH=0` (always-spec below
+the kv gate), `--no-dspark` at install / `DS4_CONT_DSPARK` unset (no DSpark).
 
 ## Benchmarks
 

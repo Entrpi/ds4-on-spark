@@ -7,15 +7,17 @@
 # What this script does (all steps idempotent — safe to re-run):
 #
 #   1. Verifies the host is a DGX Spark (or other GB10/SM121 system) with
-#      CUDA 13 toolkit installed and >= 110 GiB free disk for the GGUFs.
-#   2. Clones (or fast-forwards) antirez/ds4 into $DS4_SRC_DIR.
+#      CUDA 13 toolkit installed and >= 120 GiB free disk for the GGUFs.
+#   2. Clones (or fast-forwards) the ds4 fork at tag v0.1.1 into $DS4_SRC_DIR.
 #   3. Builds ds4, ds4-server, ds4-bench with CUDA_ARCH=sm_121.
-#   4. Downloads the Q2 quantized GGUF (~81 GiB) from
-#      antirez/deepseek-v4-gguf into $DS4_GGUF_DIR.
-#   5. Optionally downloads the MTP speculative-decode GGUF (~3.6 GiB).
-#   6. Runs a single-prompt smoke test against the canonical
+#   4. Downloads the Q2 quantized GGUF (~81 GiB) + MTP GGUF (~3.6 GiB) from
+#      antirez/deepseek-v4-gguf and the DSpark Q2K drafter (~6.5 GiB) from
+#      bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF into $DS4_GGUF_DIR.
+#   5. Runs a single-prompt smoke test against the canonical
 #      "capital of France" prompt — expects "Paris" in the output.
-#   7. Optionally starts ds4-server on $DS4_PORT with the loaded model.
+#   6. Optionally (--start) serves the full DSpark speculative stack on
+#      $DS4_PORT (lossless; yield-quench + kv-gate ride the v0.1.1 defaults).
+#      --no-dspark serves plain continuous decode instead.
 #
 # The script makes NO changes outside:
 #   - $DS4_SRC_DIR      (default ~/code/ds4)
@@ -47,10 +49,13 @@ CUDA_ARCH="${CUDA_ARCH:-sm_121}"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc 2>/dev/null || echo 4)}"
 
 HF_REPO="${HF_REPO:-antirez/deepseek-v4-gguf}"
-# Default to the imatrix-tuned q2 (better quality than plain q2).
-GGUF_FILE="${GGUF_FILE:-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf}"
+# The imatrix-tuned q2 — the build all fork quality baselines were stamped on
+# (the repo also hosts a plain chat-v2.gguf; the old default named it while
+# claiming imatrix).
+GGUF_FILE="${GGUF_FILE:-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf}"
 MTP_FILE="${MTP_FILE:-DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf}"
 
+DSPARK_HF_REPO="${DSPARK_HF_REPO:-bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF}"
 DSPARK_FILE="${DSPARK_FILE:-DSpark-drafter-Q2K-Q8.gguf}"
 
 DS4_PORT="${DS4_PORT:-8000}"
@@ -62,8 +67,11 @@ SKIP_DOWNLOAD=0
 SKIP_MTP=0
 SKIP_SMOKE=0
 START_SERVER=0
-WITH_MTP=0
-WITH_DSPARK=0
+# DSpark speculative decode is the default serving mode since v0.1.1 (suite
+# mean 1.38x plain; net-positive per request via the yield-quench controller).
+# --no-dspark serves plain continuous decode instead.
+WITH_MTP=1
+WITH_DSPARK=1
 
 usage() {
     cat <<EOF
@@ -74,11 +82,11 @@ Flags:
   --force                 Skip GB10/SM121 host check.
   --no-build              Skip clone + build (use existing $DS4_SRC_DIR/ds4*).
   --no-download           Skip GGUF download.
-  --with-mtp              Also download the MTP speculative-decode GGUF.
-  --with-dspark           Serve with DSpark speculative decode (implies
-                          --with-mtp; needs \$DSPARK_FILE in the GGUF dir —
-                          build it once with gguf-tools/dspark_extract.py,
-                          see README "DSpark" section).
+  --with-mtp              (default) Download the MTP speculative-decode GGUF.
+  --with-dspark           (default) Serve with DSpark speculative decode —
+                          downloads the ~6.5 GiB Q2K drafter from
+                          $DSPARK_HF_REPO.
+  --no-dspark             Serve plain continuous decode (no drafter download).
   --no-smoke              Skip post-install smoke test.
   --start                 Start ds4-server on :$DS4_PORT after install.
   --src-dir DIR           Where to put antirez/ds4 source (default: $DS4_SRC_DIR).
@@ -102,6 +110,7 @@ while [[ $# -gt 0 ]]; do
         --no-download) SKIP_DOWNLOAD=1; shift ;;
         --with-mtp) WITH_MTP=1; shift ;;
         --with-dspark) WITH_DSPARK=1; WITH_MTP=1; shift ;;
+        --no-dspark) WITH_DSPARK=0; shift ;;
         --no-mtp) SKIP_MTP=1; shift ;;
         --no-smoke) SKIP_SMOKE=1; shift ;;
         --start) START_SERVER=1; shift ;;
@@ -171,9 +180,9 @@ verify_host() {
     # Disk
     local free_gib
     free_gib=$(df -BG "$HOME" | awk 'NR==2 {gsub("G","",$4); print $4}')
-    if (( free_gib < 110 )); then
+    if (( free_gib < 120 )); then
         if [[ "$SKIP_DOWNLOAD" -eq 0 ]]; then
-            die "Need >= 110 GiB free under $HOME; have ${free_gib} GiB. Pass --no-download to skip GGUF, or free space."
+            die "Need >= 120 GiB free under $HOME; have ${free_gib} GiB. Pass --no-download to skip GGUF, or free space."
         fi
         warn "Only ${free_gib} GiB free under $HOME; --no-download is set, continuing."
     fi
@@ -229,8 +238,8 @@ clone_and_build() {
 # ============================================================================
 
 download_one() {
-    local file="$1" dest="$2"
-    local url="https://huggingface.co/$HF_REPO/resolve/main/$file"
+    local file="$1" dest="$2" repo="${3:-$HF_REPO}"
+    local url="https://huggingface.co/$repo/resolve/main/$file"
     if [[ -f "$dest" ]]; then
         # Cheap completeness check: redownload only if HEAD content-length mismatches.
         local remote_size
@@ -257,6 +266,9 @@ download_models() {
     download_one "$GGUF_FILE" "$GGUF_PATH"
     if [[ "$WITH_MTP" -eq 1 ]] && [[ "$SKIP_MTP" -eq 0 ]]; then
         download_one "$MTP_FILE" "$MTP_PATH"
+    fi
+    if [[ "$WITH_DSPARK" -eq 1 ]]; then
+        download_one "$DSPARK_FILE" "$DSPARK_PATH" "$DSPARK_HF_REPO"
     fi
 }
 
