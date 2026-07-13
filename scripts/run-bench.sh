@@ -11,9 +11,9 @@ set -euo pipefail
 
 PORT="${PORT:-8000}"
 MODEL="${MODEL:-deepseek-v4-flash}"
-# Path or HF id of tokenizer. Defaults to the converted safetensors checkpoint
-# if you have it; otherwise points at the HF repo so llama-benchy fetches it.
-TOKENIZER="${TOKENIZER:-${TOKENIZER_DIR:-/home/ent/models/deepseek-v4-flash-ds4-q2}}"
+# Tokenizer for token counting: HF id by default (llama-benchy fetches it);
+# set TOKENIZER to a local checkout to avoid the download.
+TOKENIZER="${TOKENIZER:-${TOKENIZER_DIR:-deepseek-ai/DeepSeek-V4-Flash}}"
 
 PP=(2048)
 TG=(32 128 512)
