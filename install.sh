@@ -46,7 +46,7 @@ set -euo pipefail
 # DS4_REPO=antirez/ds4 for the upstream engine without the fork's serving
 # stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.2.2}"
+DS4_REF="${DS4_REF:-v0.2.3}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
@@ -301,33 +301,57 @@ smoke_test() {
 }
 
 # ============================================================================
-# 5. optional: start server
+# 5. install the ds4-serve launcher
+# ============================================================================
+
+install_launcher() {
+    local src dst="$HOME/.local/bin/ds4-serve"
+    src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/bin/ds4-serve"
+    if [[ ! -f "$src" ]]; then
+        # curl|bash install: fetch the launcher from the repo at the same ref.
+        mkdir -p "$HOME/.local/bin"
+        curl -fsSL "https://raw.githubusercontent.com/Entrpi/ds4-on-spark/main/bin/ds4-serve" -o "$dst" \
+            || { warn "could not install ds4-serve launcher (offline?); full command is in the README."; return; }
+    else
+        mkdir -p "$HOME/.local/bin"
+        cp "$src" "$dst"
+    fi
+    chmod +x "$dst"
+    ok "Installed ds4-serve to $dst (full stack by default; just pass -c/--host/--port)."
+    case ":$PATH:" in
+        *":$HOME/.local/bin:"*) ;;
+        *) warn "$HOME/.local/bin is not on PATH — add it to use 'ds4-serve' directly." ;;
+    esac
+}
+
+# ============================================================================
+# 6. optional: start server
 # ============================================================================
 
 start_server() {
     [[ "$START_SERVER" -eq 1 ]] || return
     [[ -f "$GGUF_PATH" ]] || die "$GGUF_PATH missing — cannot start server."
 
-    local mtp_args="" spec_env=""
+    local flags=()
     if [[ "$WITH_DSPARK" -eq 1 ]]; then
         [[ -f "$MTP_PATH" ]] || die "$MTP_PATH missing — --with-dspark needs the MTP GGUF."
         [[ -f "$DSPARK_PATH" ]] || die "$DSPARK_PATH missing — build it with gguf-tools/dspark_extract.py (README: DSpark)."
-        mtp_args="--mtp $MTP_PATH"
-        spec_env="DS4_CONT_MTP_MODE=2 DS4_CONT_DSPARK=1 DS4_DSPARK_MODEL=$DSPARK_PATH"
         log "Starting ds4-server with DSpark speculative decode (yield-quench + kv-gate ride the v0.2.2 defaults)."
     elif [[ "$WITH_MTP" -eq 1 ]] && [[ -f "$MTP_PATH" ]]; then
-        mtp_args="--mtp $MTP_PATH"
-        spec_env="DS4_CONT_MTP_MODE=2"
+        flags+=(--no-dspark)
         log "Starting ds4-server with MTP-2 speculation (continuous batching)."
     else
+        flags+=(--no-spec)
         log "Starting ds4-server (plain continuous decode; add --with-mtp or --with-dspark for speculation)."
     fi
 
-    env $spec_env nohup "$DS4_SRC_DIR/ds4-server" --cuda -m "$GGUF_PATH" \
-        $mtp_args --port "$DS4_PORT" -c "$DS4_CTX" \
+    DS4_SRC_DIR="$DS4_SRC_DIR" DS4_GGUF_DIR="$DS4_GGUF_DIR" \
+    GGUF_FILE="$GGUF_FILE" MTP_FILE="$MTP_FILE" DSPARK_FILE="$DSPARK_FILE" \
+    nohup "$HOME/.local/bin/ds4-serve" ${flags[@]+"${flags[@]}"} \
+        --port "$DS4_PORT" -c "$DS4_CTX" \
         > "$HOME/ds4-server.log" 2>&1 < /dev/null & disown
     local pid=$!
-    log "ds4-server pid=$pid, log=$HOME/ds4-server.log"
+    log "ds4-server pid=$pid, log=$HOME/ds4-server.log (launcher: ds4-serve)"
 
     log "Waiting for /v1/models ..."
     local i
@@ -350,6 +374,7 @@ verify_host
 clone_and_build
 download_models
 smoke_test
+install_launcher
 start_server
 
 echo

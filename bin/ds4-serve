@@ -1,0 +1,78 @@
+#!/bin/bash
+# ds4-serve — one-command launcher for the full ds4 serving stack.
+#
+# Installed to ~/.local/bin by ds4-on-spark's install.sh. Every optimization
+# is on by default; you only pass what you want to change:
+#
+#   ds4-serve                        # full stack, ctx 32768, 127.0.0.1:8000
+#   ds4-serve -c 69632               # bigger context
+#   ds4-serve -c 69632 --host 0.0.0.0 --port 8080
+#
+# Anything you pass goes straight to ds4-server and overrides the defaults
+# (see ds4-server --help). Two downgrade flags are handled here AND forwarded
+# to the server so its in-engine launch defaults (v0.2.3+) don't re-attach
+# what we skipped (needs ds4-server >= v0.2.3 if you override DS4_REF):
+#   --no-dspark   MTP-2 speculation only (skip the DSpark drafter)
+#   --no-spec     plain continuous decode (no speculation models loaded)
+#
+# Paths use the same env the installer uses; override if yours differ:
+#   DS4_SRC_DIR  ($HOME/code/ds4)     where ds4-server was built
+#   DS4_GGUF_DIR ($HOME/gguf)         where the GGUFs live
+#   GGUF_FILE / MTP_FILE / DSPARK_FILE  to pick different model files
+#
+# Runs in the foreground; use nohup/systemd/tmux for supervision.
+set -euo pipefail
+
+DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
+DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
+GGUF_FILE="${GGUF_FILE:-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf}"
+MTP_FILE="${MTP_FILE:-DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf}"
+DSPARK_FILE="${DSPARK_FILE:-DSpark-drafter-Q2K-Q8.gguf}"
+
+BASE="$DS4_GGUF_DIR/$GGUF_FILE"
+MTP="$DS4_GGUF_DIR/$MTP_FILE"
+DRAFTER="$DS4_GGUF_DIR/$DSPARK_FILE"
+BIN="$DS4_SRC_DIR/ds4-server"
+
+mode=dspark
+args=()
+for a in "$@"; do
+    case "$a" in
+        --no-dspark) [ "$mode" = plain ] || mode=mtp ;;
+        --no-spec)   mode=plain ;;
+        *)           args+=("$a") ;;
+    esac
+done
+
+[ -x "$BIN" ] || { echo "ds4-serve: $BIN not found (set DS4_SRC_DIR or run the installer)" >&2; exit 1; }
+[ -f "$BASE" ] || { echo "ds4-serve: base model $BASE missing (set DS4_GGUF_DIR / GGUF_FILE)" >&2; exit 1; }
+
+if [ "$mode" = dspark ] && { [ ! -f "$MTP" ] || [ ! -f "$DRAFTER" ]; }; then
+    echo "ds4-serve: MTP or DSpark GGUF missing under $DS4_GGUF_DIR — downgrading" >&2
+    mode=mtp
+fi
+if [ "$mode" = mtp ] && [ ! -f "$MTP" ]; then
+    mode=plain
+fi
+
+mtp_args=(); spec_env=()
+case "$mode" in
+    dspark)
+        mtp_args=(--mtp "$MTP")
+        spec_env=(DS4_CONT_MTP_MODE=2 DS4_CONT_DSPARK=1 "DS4_DSPARK_MODEL=$DRAFTER")
+        echo "ds4-serve: full stack — DSpark speculative decode (--no-dspark / --no-spec to downgrade)" >&2 ;;
+    mtp)
+        mtp_args=(--mtp "$MTP" --no-dspark)
+        spec_env=(DS4_CONT_MTP_MODE=2)
+        echo "ds4-serve: MTP-2 speculation (no DSpark drafter)" >&2 ;;
+    plain)
+        mtp_args=(--no-spec)
+        echo "ds4-serve: plain continuous decode" >&2 ;;
+esac
+
+# Defaults first; anything the user passed comes later and wins (ds4-server
+# takes the last occurrence of a flag).
+exec env ${spec_env[@]+"${spec_env[@]}"} "$BIN" --cuda \
+    -m "$BASE" ${mtp_args[@]+"${mtp_args[@]}"} \
+    -c 32768 --port 8000 \
+    ${args[@]+"${args[@]}"}

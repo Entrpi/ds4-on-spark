@@ -101,12 +101,36 @@ That one command:
    [`bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF`](https://huggingface.co/bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF)
    into `~/gguf` (or `$DS4_GGUF_DIR`).
 5. Runs the "capital of France" smoke test and asserts "Paris" in the output.
-6. Starts `ds4-server` on `:8000` with `-c 32768` serving the **full DSpark
+6. Installs the **`ds4-serve`** launcher to `~/.local/bin`.
+7. Starts `ds4-server` on `:8000` with `-c 32768` serving the **full DSpark
    speculative stack** — lossless, suite mean **1.38× plain decode**, with the
    yield-quench controller and kv-depth gate riding the v0.2.2 defaults.
 
 `--no-dspark` serves plain continuous decode instead (skips the drafter
 download); `--with-mtp` alone gives MTP-2 speculation (a modest ~1.08×).
+
+### Serving after install: `ds4-serve`
+
+The full-stack launch is one command; every optimization is default-on and
+you only pass what you want to change:
+
+```bash
+ds4-serve                              # full stack, ctx 32768, 127.0.0.1:8000
+ds4-serve -c 69632                     # more context (multi-agent harnesses)
+ds4-serve -c 69632 --host 0.0.0.0      # reachable from other machines
+```
+
+Anything you pass goes straight to `ds4-server` and overrides the defaults
+(`ds4-server --help` lists everything, `--cors` included). `--no-dspark`
+downgrades to MTP-2 speculation, `--no-spec` to plain decode. Sizing `-c`:
+the context budget is shared by concurrent sequences (KV ≈9.5 KiB/token), so
+bigger `-c` means fewer parallel requests fit before new ones queue. It runs
+in the foreground; supervise with nohup/systemd/tmux as you prefer.
+
+As of the v0.2.3 pin the engine itself has the same launch defaults: on this
+install layout a bare `ds4-server -c 49152 --host 0.0.0.0` boots the full
+stack too (one boot line reports what was auto-enabled). `ds4-serve` remains
+a thin convenience over it.
 
 To preview without running:
 
