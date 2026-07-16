@@ -8,7 +8,7 @@
 #
 #   1. Verifies the host is a DGX Spark (or other GB10/SM121 system) with
 #      CUDA 13 toolkit installed and >= 120 GiB free disk for the GGUFs.
-#   2. Clones (or fast-forwards) the ds4 fork at tag v0.2.1 into $DS4_SRC_DIR.
+#   2. Clones (or fast-forwards) the ds4 fork at tag v0.2.2 into $DS4_SRC_DIR.
 #   3. Builds ds4, ds4-server, ds4-bench with CUDA_ARCH=sm_121.
 #   4. Downloads the Q2 quantized GGUF (~81 GiB) + MTP GGUF (~3.6 GiB) from
 #      antirez/deepseek-v4-gguf and the DSpark Q2K drafter (~6.5 GiB) from
@@ -16,7 +16,7 @@
 #   5. Runs a single-prompt smoke test against the canonical
 #      "capital of France" prompt — expects "Paris" in the output.
 #   6. Optionally (--start) serves the full DSpark speculative stack on
-#      $DS4_PORT (lossless; yield-quench + kv-gate ride the v0.2.1 defaults).
+#      $DS4_PORT (lossless; yield-quench + kv-gate ride the v0.2.2 defaults).
 #      --no-dspark serves plain continuous decode instead.
 #
 # The script makes NO changes outside:
@@ -32,18 +32,21 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-07-16): the Entrpi/ds4 fork release tag v0.2.1 — the
+# Pin (updated 2026-07-16): the Entrpi/ds4 fork release tag v0.2.2 — the
 # robust-serving release. Everything in v0.1.1 (D2R tensor-core prefill ~2x
 # upstream on GB10, per-layer CUDA-graph decode capture, continuous batching,
 # weight server, DSpark lossless speculative decode with yield-quench +
 # kv-depth gate) plus: ship-path crash classes fixed, speculation on the
 # continuous path for tools/thinking traffic, deep-context capacity to the
 # 766K-class on one box, --mtp optional, FP8/FP4 compressed-KV opt-ins, and
-# standing release gates green on the tagged binary. Set DS4_REF=main +
+# standing release gates green on the tagged binary. v0.2.2: the engine
+# builds the aligned fast-path artifacts in-process at boot, so this
+# installer's standalone server rides the same perf tier as weight-server
+# setups (the tier is stated in the boot log). Set DS4_REF=main +
 # DS4_REPO=antirez/ds4 for the upstream engine without the fork's serving
 # stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.2.1}"
+DS4_REF="${DS4_REF:-v0.2.2}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
@@ -311,7 +314,7 @@ start_server() {
         [[ -f "$DSPARK_PATH" ]] || die "$DSPARK_PATH missing — build it with gguf-tools/dspark_extract.py (README: DSpark)."
         mtp_args="--mtp $MTP_PATH"
         spec_env="DS4_CONT_MTP_MODE=2 DS4_CONT_DSPARK=1 DS4_DSPARK_MODEL=$DSPARK_PATH"
-        log "Starting ds4-server with DSpark speculative decode (yield-quench + kv-gate ride the v0.2.1 defaults)."
+        log "Starting ds4-server with DSpark speculative decode (yield-quench + kv-gate ride the v0.2.2 defaults)."
     elif [[ "$WITH_MTP" -eq 1 ]] && [[ -f "$MTP_PATH" ]]; then
         mtp_args="--mtp $MTP_PATH"
         spec_env="DS4_CONT_MTP_MODE=2"
