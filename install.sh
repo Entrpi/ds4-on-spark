@@ -46,7 +46,7 @@ set -euo pipefail
 # DS4_REPO=antirez/ds4 for the upstream engine without the fork's serving
 # stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.2.3}"
+DS4_REF="${DS4_REF:-v0.2.4}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 

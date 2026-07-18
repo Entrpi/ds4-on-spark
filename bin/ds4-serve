@@ -47,8 +47,8 @@ done
 [ -x "$BIN" ] || { echo "ds4-serve: $BIN not found (set DS4_SRC_DIR or run the installer)" >&2; exit 1; }
 [ -f "$BASE" ] || { echo "ds4-serve: base model $BASE missing (set DS4_GGUF_DIR / GGUF_FILE)" >&2; exit 1; }
 
-if [ "$mode" = dspark ] && { [ ! -f "$MTP" ] || [ ! -f "$DRAFTER" ]; }; then
-    echo "ds4-serve: MTP or DSpark GGUF missing under $DS4_GGUF_DIR — downgrading" >&2
+if [ "$mode" = dspark ] && [ ! -f "$DRAFTER" ]; then
+    echo "ds4-serve: DSpark GGUF missing under $DS4_GGUF_DIR — downgrading" >&2
     mode=mtp
 fi
 if [ "$mode" = mtp ] && [ ! -f "$MTP" ]; then
@@ -58,9 +58,12 @@ fi
 mtp_args=(); spec_env=()
 case "$mode" in
     dspark)
-        mtp_args=(--mtp "$MTP")
+        # v0.2.4: no --mtp — the server drops the MTP head when a drafter is
+        # armed (~3.55 GiB back, counter-identical output, equal or better
+        # wall). --no-dspark still boots the MTP-2 configuration below.
+        mtp_args=()
         spec_env=(DS4_CONT_MTP_MODE=2 DS4_CONT_DSPARK=1 "DS4_DSPARK_MODEL=$DRAFTER")
-        echo "ds4-serve: full stack — DSpark speculative decode (--no-dspark / --no-spec to downgrade)" >&2 ;;
+        echo "ds4-serve: DSpark speculative decode, MTP head dropped (--no-dspark / --no-spec to downgrade)" >&2 ;;
     mtp)
         mtp_args=(--mtp "$MTP" --no-dspark)
         spec_env=(DS4_CONT_MTP_MODE=2)
