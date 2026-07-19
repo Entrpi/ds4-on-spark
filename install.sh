@@ -32,21 +32,23 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-07-16): the Entrpi/ds4 fork release tag v0.2.2 — the
-# robust-serving release. Everything in v0.1.1 (D2R tensor-core prefill ~2x
-# upstream on GB10, per-layer CUDA-graph decode capture, continuous batching,
-# weight server, DSpark lossless speculative decode with yield-quench +
-# kv-depth gate) plus: ship-path crash classes fixed, speculation on the
-# continuous path for tools/thinking traffic, deep-context capacity to the
-# 766K-class on one box, --mtp optional, FP8/FP4 compressed-KV opt-ins, and
-# standing release gates green on the tagged binary. v0.2.2: the engine
-# builds the aligned fast-path artifacts in-process at boot, so this
-# installer's standalone server rides the same perf tier as weight-server
-# setups (the tier is stated in the boot log). Set DS4_REF=main +
-# DS4_REPO=antirez/ds4 for the upstream engine without the fork's serving
-# stack.
+# Pin (updated 2026-07-20): the Entrpi/ds4 fork release tag v0.3.0.
+# Everything in v0.2.4 (packed FP8/FP4 compressed KV as the primary
+# storage, deep decode 19-26% faster, ~3x less KV memory, MTP head
+# dropped beside an armed drafter) plus: the batched-decode indexer
+# scorer rewritten on tensor cores (deep decode another 13-21% faster
+# at 240K-515K context), durable pinned banks (deep conversations
+# survive bank eviction and server restarts through the disk KV tier —
+# an 80K-token resume takes ~3 s instead of minutes of re-prefill), and
+# disk checkpoints storing packed rows natively (~2.3x smaller,
+# cross-config restores bitwise exact). Standing release gates green on
+# the tagged binary. The engine builds its aligned fast-path artifacts
+# in-process at boot (since v0.2.2), so this installer's standalone
+# server rides the full perf tier (stated in the boot log). Set
+# DS4_REF=main + DS4_REPO=antirez/ds4 for the upstream engine without
+# the fork's serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.2.4}"
+DS4_REF="${DS4_REF:-v0.3.0}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
