@@ -32,25 +32,26 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-07-21): the Entrpi/ds4 fork release tag v0.4.0.
-# Everything in v0.3.0 (tensor-core scorer, durable pinned banks,
-# packed-native disk checkpoints) plus the deep-decode substrate
-# release: head-group flash-decode for dense and indexed attention,
-# aligned Q8_0 dense tier at all verify widths, indexer scorer
-# token-loop, MoE gate_up expert dedup, and speculative decode armed
-# at every depth (the static 64K gate is gone; the quench controller
-# governs). Deep serving decode drops 27-35% release-over-release:
-# 240K 76.3 -> 55.8 ms/tok, 515K 95.2 -> 62.1, 12K 36.6. Also merges
-# the contributed queued-client zombie reap (dead clients stop
-# holding admission slots) and the ds4-bench 32K+ illegal-access
-# fix. Standing release gates green on the tagged binary. The engine
+# Pin (updated 2026-07-22): the Entrpi/ds4 fork release tag v0.4.1.
+# Everything in v0.4.0 (deep-decode substrate: head-group
+# flash-decode for dense and indexed attention, aligned Q8_0 dense
+# tier at all verify widths, indexer scorer token-loop, MoE gate_up
+# expert dedup, speculation armed at every depth, the contributed
+# queued-client zombie reap, the ds4-bench 32K+ fix) plus the v0.4.1
+# quench recalibration: the speculation break-even guard now tracks
+# v0.4's measured verify cost (2.22 -> 2.10; the v0.1.1-era guard was
+# terminally quenching winners). Code-corpus decode 1.10x own plain,
+# adversarial prose 1.04x (typical quench floor 0.95-0.97x, bounded
+# learning debt; post-quench serving identical to plain). Deep
+# stamps hold: 240K 57.3 ms/tok, 515K 59.9, 12K 36.6. Standing
+# release gates green on the tagged binary. The engine
 # builds its aligned fast-path artifacts in-process at boot (since
 # v0.2.2), so this installer's standalone server rides the full perf
 # tier (stated in the boot log). Set
 # DS4_REF=main + DS4_REPO=antirez/ds4 for the upstream engine without
 # the fork's serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.4.0}"
+DS4_REF="${DS4_REF:-v0.4.1}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 

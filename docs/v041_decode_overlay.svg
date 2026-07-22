@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560">
+<style>
+  text{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;fill:#222}
+  .title{font-size:20px;font-weight:600}
+  .subtitle{font-size:12px;fill:#555}
+  .axis-label{font-size:11px;fill:#555}
+  .legend{font-size:11.5px;fill:#333}
+  .ratio{font-size:11px;font-weight:600;fill:#0a7d33}
+  .note{font-size:10.5px;fill:#666}
+  .grid{stroke:#e4e4e4;stroke-width:1}
+  .axis{stroke:#888;stroke-width:1.2}
+  .line-ship{stroke:#0a7d33;stroke-width:2.6;fill:none}
+  .line-code{stroke:#e8590c;stroke-width:2.2;fill:none;stroke-dasharray:7 4}
+  .line-plain{stroke:#1c6dd0;stroke-width:2;fill:none}
+  .line-up{stroke:#8057c4;stroke-width:1.8;fill:none;stroke-dasharray:2 3}
+</style>
+<rect width="1200" height="560" fill="#ffffff"/>
+<text class="title" x="78" y="34">Ship decode across context frontiers: plain vs DSpark, two corpora (GB10 Spark, v0.4.1)</text>
+<text class="subtitle" x="78" y="54">fork 6937b2c launch defaults; since v0.4 there is no kv-depth gate — speculation is armed at every depth, the yield-quench controller governs. llama-benchy pp=2048 tg=128, 1 run/pt, no cache, token_ids-exact.</text>
+<line class="grid" x1="78" y1="442.0" x2="1160" y2="442.0"/>
+<text class="axis-label" x="70" y="445.0" text-anchor="end">0</text>
+<line class="grid" x1="78" y1="372.8" x2="1160" y2="372.8"/>
+<text class="axis-label" x="70" y="375.8" text-anchor="end">8</text>
+<line class="grid" x1="78" y1="303.6" x2="1160" y2="303.6"/>
+<text class="axis-label" x="70" y="306.6" text-anchor="end">16</text>
+<line class="grid" x1="78" y1="234.4" x2="1160" y2="234.4"/>
+<text class="axis-label" x="70" y="237.4" text-anchor="end">24</text>
+<line class="grid" x1="78" y1="165.2" x2="1160" y2="165.2"/>
+<text class="axis-label" x="70" y="168.2" text-anchor="end">32</text>
+<line class="grid" x1="78" y1="96.0" x2="1160" y2="96.0"/>
+<text class="axis-label" x="70" y="99.0" text-anchor="end">40</text>
+<line class="grid" x1="78.0" y1="96" x2="78.0" y2="442"/>
+<text class="axis-label" x="78.0" y="458" text-anchor="middle">2k</text>
+<line class="grid" x1="198.2" y1="96" x2="198.2" y2="442"/>
+<text class="axis-label" x="198.2" y="458" text-anchor="middle">16k</text>
+<line class="grid" x1="335.6" y1="96" x2="335.6" y2="442"/>
+<text class="axis-label" x="335.6" y="458" text-anchor="middle">32k</text>
+<line class="grid" x1="473.0" y1="96" x2="473.0" y2="442"/>
+<text class="axis-label" x="473.0" y="458" text-anchor="middle">48k</text>
+<line class="grid" x1="610.4" y1="96" x2="610.4" y2="442"/>
+<text class="axis-label" x="610.4" y="458" text-anchor="middle">64k</text>
+<line class="grid" x1="885.2" y1="96" x2="885.2" y2="442"/>
+<text class="axis-label" x="885.2" y="458" text-anchor="middle">96k</text>
+<line class="grid" x1="1160.0" y1="96" x2="1160.0" y2="442"/>
+<text class="axis-label" x="1160.0" y="458" text-anchor="middle">128k</text>
+<line class="axis" x1="78" y1="96" x2="78" y2="442"/>
+<line class="axis" x1="78" y1="442" x2="1160" y2="442"/>
+<text class="axis-label" x="26" y="269.0" text-anchor="middle" transform="rotate(-90 26 269.0)">generation tok/s</text>
+<text class="axis-label" x="619" y="476" text-anchor="middle">context depth (tokens)</text>
+<polyline class="line-up" points="78.0,314.3 95.2,315.7 112.3,316.5 129.5,316.9 146.7,316.3 163.9,317.7 181.0,317.2 198.2,317.6 215.4,318.7 232.6,318.1 249.7,317.5 266.9,318.7 284.1,319.1 301.3,320.3 318.4,323.6 335.6,324.0 352.8,324.3 370.0,323.6 387.1,323.9 404.3,324.1 421.5,325.3 438.7,324.7 455.8,316.9 473.0,321.4 490.2,325.5 507.4,325.8 524.5,326.1 541.7,327.3 558.9,327.6 576.1,326.9 593.2,327.2 610.4,328.3 679.1,329.2 747.8,330.2 816.5,330.3 885.2,332.0 953.9,333.9 1022.6,333.3 1091.3,333.1 1160.0,336.6"/>
+<polyline class="line-plain" points="78.0,269.4 95.2,268.0 112.3,270.0 129.5,270.3 146.7,270.5 163.9,271.3 181.0,272.2 198.2,271.5 215.4,271.5 232.6,271.1 249.7,272.7 266.9,271.8 284.1,273.4 301.3,273.2 318.4,283.2 335.6,285.8 352.8,284.9 370.0,285.4 387.1,286.2 404.3,284.6 421.5,288.4 438.7,287.2 455.8,288.7 473.0,288.9 490.2,289.0 507.4,287.2 524.5,288.7 541.7,290.7 558.9,287.6 576.1,288.9 593.2,290.3 610.4,290.1"/>
+<polyline class="line-code" points="78.0,263.4 112.3,224.2 146.7,260.7 181.0,269.0 215.4,277.7 249.7,280.4 284.1,277.0 318.4,227.2 352.8,279.2 387.1,225.6 421.5,289.6 455.8,246.1 490.2,254.0 524.5,291.7 558.9,262.8 593.2,275.4"/>
+<polyline class="line-ship" points="78.0,232.0 95.2,256.3 112.3,266.1 129.5,275.5 146.7,251.9 163.9,279.3 181.0,276.9 198.2,275.2 215.4,278.5 232.6,236.3 249.7,220.2 266.9,277.5 284.1,221.6 301.3,244.0 318.4,286.8 335.6,269.3 352.8,289.6 370.0,293.2 387.1,290.9 404.3,292.8 421.5,290.9 438.7,290.4 455.8,293.7 473.0,294.1 490.2,294.1 507.4,292.4 524.5,293.8 541.7,290.7 558.9,292.7 576.1,289.9 593.2,136.8 610.4,295.5 679.1,295.6 747.8,310.5 816.5,309.4 885.2,304.3 953.9,297.3 1022.6,301.9 1091.3,297.3 1160.0,301.8"/>
+<text class="ratio" x="95.2" y="112" text-anchor="start">ship vs upstream: 1.47x avg 2k-32k, 1.33x @128k</text>
+<text class="ratio" x="95.2" y="128" text-anchor="start" fill="#1c6dd0">quench floor vs own plain: 0.95x (worst point, prose)</text>
+<text class="ratio" x="95.2" y="144" text-anchor="start" fill="#e8590c">code corpus vs plain: 1.10x avg</text>
+<line class="line-ship" x1="830" y1="110" x2="858" y2="110"/>
+<text class="legend" x="864" y="114">DSpark ship — W&amp;P prose (adversarial floor)</text>
+<line class="line-code" x1="830" y1="128" x2="858" y2="128"/>
+<text class="legend" x="864" y="132">DSpark ship — C source continuation (favorable)</text>
+<line class="line-plain" x1="830" y1="146" x2="858" y2="146"/>
+<text class="legend" x="864" y="150">plain cont+capture (--no-spec), v0.4.1</text>
+<line class="line-up" x1="830" y1="164" x2="858" y2="164"/>
+<text class="legend" x="864" y="168">upstream main (efdadd4), its own defaults</text>
+<text class="note" x="78" y="514">The prose line is the floor test: W&amp;P continuation is adversarial for draft acceptance. The C-source line is the favorable category. Both ride identical ship defaults; the spread between them is corpus, not configuration.</text>
+<text class="note" x="78" y="530">Plain line measured to 64k (low band). Ratios are computed from the plotted points: geometric mean over 2k-32k, floor = worst common point. Upstream = its server defaults (thinking, no MTP), cross-checked within 2% of its engine-side decode log. GB10 = DGX Spark, sm_121, same GGUF everywhere. 2026-07-22.</text>
+</svg>

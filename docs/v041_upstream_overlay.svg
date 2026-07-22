@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520">
+<style>
+  text{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;fill:#222}
+  .title{font-size:20px;font-weight:600}
+  .subtitle{font-size:12px;fill:#555}
+  .panel-title{font-size:14px;font-weight:600}
+  .axis-label{font-size:11px;fill:#555}
+  .legend{font-size:11px;fill:#333}
+  .ratio{font-size:11px;font-weight:600;fill:#0a7d33}
+  .note{font-size:10.5px;fill:#666}
+  .grid{stroke:#e4e4e4;stroke-width:1}
+  .axis{stroke:#888;stroke-width:1.2}
+  .line-new{stroke:#0a7d33;stroke-width:2.4;fill:none}
+  .line-old{stroke:#8057c4;stroke-width:2;fill:none;stroke-dasharray:6 3}
+  .gain{fill:#0a7d33;fill-opacity:0.10}
+</style>
+<rect width="1200" height="520" fill="#ffffff"/>
+<text class="title" x="78" y="34">Upstream antirez/ds4 main vs the fork — GB10 context frontier (llama-benchy, pp=2048 tg=128, 1 run/pt, no cache)</text>
+<text class="subtitle" x="78" y="54">fork v0.4.1 ship defaults (6937b2c: batched cont serving, D2R prefill, head-group flash-decode, DSpark spec armed at every depth) vs upstream main (efdadd4), same box, same GGUF, same instrument, same day</text>
+<text class="panel-title" x="334" y="104" text-anchor="middle">prefill throughput — fork vs upstream</text>
+<line class="grid" x1="78" y1="428.0" x2="590" y2="428.0"/>
+<text class="axis-label" x="70" y="431.0" text-anchor="end">0</text>
+<line class="grid" x1="78" y1="366.0" x2="590" y2="366.0"/>
+<text class="axis-label" x="70" y="369.0" text-anchor="end">200</text>
+<line class="grid" x1="78" y1="304.0" x2="590" y2="304.0"/>
+<text class="axis-label" x="70" y="307.0" text-anchor="end">400</text>
+<line class="grid" x1="78" y1="242.0" x2="590" y2="242.0"/>
+<text class="axis-label" x="70" y="245.0" text-anchor="end">600</text>
+<line class="grid" x1="78" y1="180.0" x2="590" y2="180.0"/>
+<text class="axis-label" x="70" y="183.0" text-anchor="end">800</text>
+<line class="grid" x1="78" y1="118.0" x2="590" y2="118.0"/>
+<text class="axis-label" x="70" y="121.0" text-anchor="end">1000</text>
+<line class="grid" x1="78.0" y1="118" x2="78.0" y2="428"/>
+<text class="axis-label" x="78.0" y="444" text-anchor="middle">2k</text>
+<line class="grid" x1="199.9" y1="118" x2="199.9" y2="428"/>
+<text class="axis-label" x="199.9" y="444" text-anchor="middle">32k</text>
+<line class="grid" x1="329.9" y1="118" x2="329.9" y2="428"/>
+<text class="axis-label" x="329.9" y="444" text-anchor="middle">64k</text>
+<line class="grid" x1="460.0" y1="118" x2="460.0" y2="428"/>
+<text class="axis-label" x="460.0" y="444" text-anchor="middle">96k</text>
+<line class="grid" x1="590.0" y1="118" x2="590.0" y2="428"/>
+<text class="axis-label" x="590.0" y="444" text-anchor="middle">128k</text>
+<line class="axis" x1="78" y1="118" x2="78" y2="428"/>
+<line class="axis" x1="78" y1="428" x2="590" y2="428"/>
+<text class="axis-label" x="26" y="273.0" text-anchor="middle" transform="rotate(-90 26 273.0)">tok/s</text>
+<text class="axis-label" x="334" y="462" text-anchor="middle">context depth (tokens)</text>
+<polygon class="gain" points="78.0,240.5 86.1,142.5 94.3,163.9 102.4,151.4 110.5,166.9 118.6,158.7 126.8,181.6 134.9,163.5 143.0,168.2 151.1,167.8 159.3,171.3 167.4,172.6 175.5,175.7 183.7,176.5 191.8,180.1 199.9,182.7 208.0,184.6 216.2,186.0 224.3,189.2 232.4,190.7 240.5,193.8 248.7,199.6 256.8,198.2 264.9,199.1 273.0,201.7 281.2,203.4 289.3,205.4 297.4,207.2 305.6,209.1 313.7,210.4 321.8,211.8 329.9,213.5 362.4,218.2 395.0,224.7 427.5,229.8 460.0,234.4 492.5,242.4 525.0,243.6 557.5,250.9 590.0,252.4 590.0,338.0 557.5,336.5 525.0,335.0 492.5,333.4 460.0,331.9 427.5,330.3 395.0,328.1 362.4,326.9 329.9,325.1 321.8,324.0 313.7,323.9 305.6,323.0 297.4,323.0 289.3,322.0 281.2,322.0 273.0,321.0 264.9,321.0 256.8,319.8 248.7,319.9 240.5,318.7 232.4,318.8 224.3,317.6 216.2,317.8 208.0,316.4 199.9,316.5 191.8,314.8 183.7,315.2 175.5,313.9 167.4,314.4 159.3,312.6 151.1,312.0 143.0,311.4 134.9,310.9 126.8,310.2 118.6,311.8 110.5,309.0 102.4,307.8 94.3,307.2 86.1,305.5 78.0,302.1"/>
+<polyline class="line-old" points="78.0,302.1 86.1,305.5 94.3,307.2 102.4,307.8 110.5,309.0 118.6,311.8 126.8,310.2 134.9,310.9 143.0,311.4 151.1,312.0 159.3,312.6 167.4,314.4 175.5,313.9 183.7,315.2 191.8,314.8 199.9,316.5 208.0,316.4 216.2,317.8 224.3,317.6 232.4,318.8 240.5,318.7 248.7,319.9 256.8,319.8 264.9,321.0 273.0,321.0 281.2,322.0 289.3,322.0 297.4,323.0 305.6,323.0 313.7,323.9 321.8,324.0 329.9,325.1 362.4,326.9 395.0,328.1 427.5,330.3 460.0,331.9 492.5,333.4 525.0,335.0 557.5,336.5 590.0,338.0"/>
+<polyline class="line-new" points="78.0,240.5 86.1,142.5 94.3,163.9 102.4,151.4 110.5,166.9 118.6,158.7 126.8,181.6 134.9,163.5 143.0,168.2 151.1,167.8 159.3,171.3 167.4,172.6 175.5,175.7 183.7,176.5 191.8,180.1 199.9,182.7 208.0,184.6 216.2,186.0 224.3,189.2 232.4,190.7 240.5,193.8 248.7,199.6 256.8,198.2 264.9,199.1 273.0,201.7 281.2,203.4 289.3,205.4 297.4,207.2 305.6,209.1 313.7,210.4 321.8,211.8 329.9,213.5 362.4,218.2 395.0,224.7 427.5,229.8 460.0,234.4 492.5,242.4 525.0,243.6 557.5,250.9 590.0,252.4"/>
+<text class="ratio" x="82.0" y="132.5" text-anchor="start">2.17x avg 2k-32k</text>
+<text class="ratio" x="586.0" y="244.4" text-anchor="end">1.95x @128k</text>
+<line class="line-new" x1="354" y1="134" x2="380" y2="134"/>
+<text class="legend" x="386" y="138">fork v0.4.1 (6937b2c)</text>
+<line class="line-old" x1="354" y1="152" x2="380" y2="152"/>
+<text class="legend" x="386" y="156">upstream main (efdadd4)</text>
+<text class="panel-title" x="916" y="104" text-anchor="middle">generation throughput — fork vs upstream</text>
+<line class="grid" x1="660" y1="428.0" x2="1172" y2="428.0"/>
+<text class="axis-label" x="652" y="431.0" text-anchor="end">0</text>
+<line class="grid" x1="660" y1="366.0" x2="1172" y2="366.0"/>
+<text class="axis-label" x="652" y="369.0" text-anchor="end">8</text>
+<line class="grid" x1="660" y1="304.0" x2="1172" y2="304.0"/>
+<text class="axis-label" x="652" y="307.0" text-anchor="end">16</text>
+<line class="grid" x1="660" y1="242.0" x2="1172" y2="242.0"/>
+<text class="axis-label" x="652" y="245.0" text-anchor="end">24</text>
+<line class="grid" x1="660" y1="180.0" x2="1172" y2="180.0"/>
+<text class="axis-label" x="652" y="183.0" text-anchor="end">32</text>
+<line class="grid" x1="660" y1="118.0" x2="1172" y2="118.0"/>
+<text class="axis-label" x="652" y="121.0" text-anchor="end">40</text>
+<line class="grid" x1="660.0" y1="118" x2="660.0" y2="428"/>
+<text class="axis-label" x="660.0" y="444" text-anchor="middle">2k</text>
+<line class="grid" x1="781.9" y1="118" x2="781.9" y2="428"/>
+<text class="axis-label" x="781.9" y="444" text-anchor="middle">32k</text>
+<line class="grid" x1="911.9" y1="118" x2="911.9" y2="428"/>
+<text class="axis-label" x="911.9" y="444" text-anchor="middle">64k</text>
+<line class="grid" x1="1042.0" y1="118" x2="1042.0" y2="428"/>
+<text class="axis-label" x="1042.0" y="444" text-anchor="middle">96k</text>
+<line class="grid" x1="1172.0" y1="118" x2="1172.0" y2="428"/>
+<text class="axis-label" x="1172.0" y="444" text-anchor="middle">128k</text>
+<line class="axis" x1="660" y1="118" x2="660" y2="428"/>
+<line class="axis" x1="660" y1="428" x2="1172" y2="428"/>
+<text class="axis-label" x="608" y="273.0" text-anchor="middle" transform="rotate(-90 608 273.0)">tok/s</text>
+<text class="axis-label" x="916" y="462" text-anchor="middle">context depth (tokens)</text>
+<polygon class="gain" points="660.0,239.9 668.1,261.6 676.3,270.4 684.4,278.8 692.5,257.7 700.6,282.2 708.8,280.1 716.9,278.5 725.0,281.5 733.1,243.7 741.3,229.3 749.4,280.6 757.5,230.6 765.7,250.6 773.8,288.9 781.9,273.2 790.0,291.4 798.2,294.7 806.3,292.6 814.4,294.4 822.5,292.7 830.7,292.1 838.8,295.1 846.9,295.4 855.0,295.5 863.2,294.0 871.3,295.2 879.4,292.4 887.6,294.2 895.7,291.7 903.8,154.6 911.9,296.7 944.4,296.8 977.0,310.1 1009.5,309.2 1042.0,304.7 1074.5,298.4 1107.0,302.5 1139.5,298.3 1172.0,302.4 1172.0,333.6 1139.5,330.4 1107.0,330.6 1074.5,331.2 1042.0,329.5 1009.5,327.9 977.0,327.8 944.4,326.9 911.9,326.1 903.8,325.1 895.7,324.8 887.6,325.5 879.4,325.3 871.3,324.2 863.2,323.9 855.0,323.6 846.9,319.9 838.8,315.9 830.7,322.9 822.5,323.5 814.4,322.4 806.3,322.2 798.2,321.9 790.0,322.5 781.9,322.3 773.8,321.9 765.7,319.0 757.5,317.9 749.4,317.5 741.3,316.4 733.1,317.0 725.0,317.6 716.9,316.5 708.8,316.2 700.6,316.7 692.5,315.4 684.4,315.9 676.3,315.5 668.1,314.9 660.0,313.6"/>
+<polyline class="line-old" points="660.0,313.6 668.1,314.9 676.3,315.5 684.4,315.9 692.5,315.4 700.6,316.7 708.8,316.2 716.9,316.5 725.0,317.6 733.1,317.0 741.3,316.4 749.4,317.5 757.5,317.9 765.7,319.0 773.8,321.9 781.9,322.3 790.0,322.5 798.2,321.9 806.3,322.2 814.4,322.4 822.5,323.5 830.7,322.9 838.8,315.9 846.9,319.9 855.0,323.6 863.2,323.9 871.3,324.2 879.4,325.3 887.6,325.5 895.7,324.8 903.8,325.1 911.9,326.1 944.4,326.9 977.0,327.8 1009.5,327.9 1042.0,329.5 1074.5,331.2 1107.0,330.6 1139.5,330.4 1172.0,333.6"/>
+<polyline class="line-new" points="660.0,239.9 668.1,261.6 676.3,270.4 684.4,278.8 692.5,257.7 700.6,282.2 708.8,280.1 716.9,278.5 725.0,281.5 733.1,243.7 741.3,229.3 749.4,280.6 757.5,230.6 765.7,250.6 773.8,288.9 781.9,273.2 790.0,291.4 798.2,294.7 806.3,292.6 814.4,294.4 822.5,292.7 830.7,292.1 838.8,295.1 846.9,295.4 855.0,295.5 863.2,294.0 871.3,295.2 879.4,292.4 887.6,294.2 895.7,291.7 903.8,154.6 911.9,296.7 944.4,296.8 977.0,310.1 1009.5,309.2 1042.0,304.7 1074.5,298.4 1107.0,302.5 1139.5,298.3 1172.0,302.4"/>
+<text class="ratio" x="664.0" y="219.3" text-anchor="start">1.47x avg 2k-32k</text>
+<text class="ratio" x="1168.0" y="294.4" text-anchor="end">1.33x @128k</text>
+<line class="line-new" x1="936" y1="134" x2="962" y2="134"/>
+<text class="legend" x="968" y="138">fork v0.4.1 (6937b2c)</text>
+<line class="line-old" x1="936" y1="152" x2="962" y2="152"/>
+<text class="legend" x="968" y="156">upstream main (efdadd4)</text>
+<text class="note" x="78" y="478">Points at 2k-8k are single-run volatile on this instrument; points at 10k+ repeat within 1% run to run. The low-end multiplier is the 2k-32k geometric-mean ratio, not a single point; the deep multiplier is the single 128k point.</text>
+<text class="note" x="78" y="494">Gen lines are single-stream benchy wall tok/s (fork token_ids-exact; upstream cross-checked within 2% of its own engine-side decode log). Fork = launch defaults (continuous batching + capture, DSpark armed, quench governing). Upstream = its server defaults (thinking mode, no MTP — its single-token MTP is net-negative single-stream).</text>
+<text class="note" x="78" y="510">GB10 = DGX Spark, sm_121, self-load boots, both engines on the same DeepSeek-V4-Flash GGUF. 2026-07-22.</text>
+</svg>
