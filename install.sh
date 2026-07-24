@@ -32,7 +32,7 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-07-22): the Entrpi/ds4 fork release tag v0.4.1.
+# Pin (updated 2026-07-24): the Entrpi/ds4 fork release tag v0.4.2.
 # Everything in v0.4.0 (deep-decode substrate: head-group
 # flash-decode for dense and indexed attention, aligned Q8_0 dense
 # tier at all verify widths, indexer scorer token-loop, MoE gate_up
@@ -43,7 +43,10 @@ set -euo pipefail
 # terminally quenching winners). Code-corpus decode 1.10x own plain,
 # adversarial prose 1.04x (typical quench floor 0.95-0.97x, bounded
 # learning debt; post-quench serving identical to plain). Deep
-# stamps hold: 240K 57.3 ms/tok, 515K 59.9, 12K 36.6. Standing
+# stamps hold: 240K 57.3 ms/tok, 515K 59.9, 12K 36.6. v0.4.2 adds the
+# community-contributed thinking-mode warm reuse on the continuous
+# path (thinking turns reuse KV instead of cold re-prefilling, and
+# thinking banks now persist to the disk KV tier). Standing
 # release gates green on the tagged binary. The engine
 # builds its aligned fast-path artifacts in-process at boot (since
 # v0.2.2), so this installer's standalone server rides the full perf
@@ -51,7 +54,7 @@ set -euo pipefail
 # DS4_REF=main + DS4_REPO=antirez/ds4 for the upstream engine without
 # the fork's serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.4.1}"
+DS4_REF="${DS4_REF:-v0.4.2}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 

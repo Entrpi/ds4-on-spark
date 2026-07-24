@@ -41,8 +41,11 @@ post-quench serving measured identical to plain (forced-quench identity
 ![Ship decode across context frontiers: plain vs DSpark with quench, two corpora, upstream reference](docs/v041_decode_overlay.svg)
 
 **Status:** Working end-to-end, pinned to the fork release
-[**`v0.4.1`**](https://github.com/Entrpi/ds4/blob/v0.4.1/CHANGELOG.md) — the
-deep-decode substrate line plus the quench recalibration: head-group
+[**`v0.4.2`**](https://github.com/Entrpi/ds4/blob/v0.4.2/CHANGELOG.md) — the
+deep-decode substrate line plus the quench recalibration and the
+community-contributed thinking-mode warm reuse (v0.4.2: thinking turns
+reuse KV on the continuous path instead of cold re-prefilling every
+turn, and thinking banks now persist to the disk KV tier): head-group
 flash-decode for dense and indexed attention, aligned dense tiers at every
 verify width, speculation armed at every depth (the static 64k kv-depth
 gate is gone; the yield-quench controller is the only governor), and the
@@ -69,7 +72,7 @@ stepwise math) predates v0.4.0's much faster plain baseline. Prefill runs
 ~2.2× the upstream engine on GB10 (D2R tensor-core MoE GEMMs, measured
 against upstream main 2026-07-21). The Metal backend is unaffected.
 
-- **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine (CUDA backend landed 2026-05-11). **This repo pins the [`Entrpi/ds4`](https://github.com/Entrpi/ds4) fork at release [`v0.4.1`](https://github.com/Entrpi/ds4/blob/v0.4.1/CHANGELOG.md)** (2026-07-22): the deep-decode substrate line — everything through v0.2's robust serving (continuous batching, crash fixes, tools/thinking speculation on the continuous path, deep-context capacity, FP8/FP4 packed compressed-KV as the default primaries, observability), v0.3's tensor-core batched scorer and durable pinned banks (deep conversations survive eviction and restarts), v0.4's head-group flash-decode for dense and indexed attention, aligned dense verify tiers, MoE gate_up expert dedup, speculation armed at every depth (quench governing, no kv-depth gate) plus a community-contributed reap of queued requests whose client disconnected, and v0.4.1's quench recalibration (the break-even guard now tracks v0.4's measured verify cost). The fork `CHANGELOG.md` documents every fork-side change.
+- **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine (CUDA backend landed 2026-05-11). **This repo pins the [`Entrpi/ds4`](https://github.com/Entrpi/ds4) fork at release [`v0.4.2`](https://github.com/Entrpi/ds4/blob/v0.4.2/CHANGELOG.md)** (2026-07-24): the deep-decode substrate line — everything through v0.2's robust serving (continuous batching, crash fixes, tools/thinking speculation on the continuous path, deep-context capacity, FP8/FP4 packed compressed-KV as the default primaries, observability), v0.3's tensor-core batched scorer and durable pinned banks (deep conversations survive eviction and restarts), v0.4's head-group flash-decode for dense and indexed attention, aligned dense verify tiers, MoE gate_up expert dedup, speculation armed at every depth (quench governing, no kv-depth gate) plus a community-contributed reap of queued requests whose client disconnected, v0.4.1's quench recalibration (the break-even guard now tracks v0.4's measured verify cost), and v0.4.2's community-contributed thinking-mode warm reuse (thinking turns reuse KV on the continuous path instead of cold re-prefilling; thinking banks now persist to the disk KV tier). The fork `CHANGELOG.md` documents every fork-side change.
 - **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf) — 81 GiB asymmetric quant: IQ2_XXS for routed-expert gate/up, Q2_K for routed-expert down (these dominate model bytes), Q8_0 for everything else dense (shared expert, attention projections, output head, router), F16 for LoRA matrices and the compressor/indexer, F32 norms. (FP8 in ds4 is a *runtime* KV-cache quantization — E4M3FN round-trip — not a stored weight format.) Plus an optional 3.6 GiB MTP draft GGUF.
 - **Hardware:** NVIDIA DGX Spark, GB10, SM121, 128 GB LPDDR5X unified (~119 GiB usable). The donor's `Makefile` has a `make cuda-spark` target that builds native `sm_121`, plus `make cuda CUDA_ARCH=sm_NNN` for an explicit override — both GB10-correct with no patches needed. (Building with an empty `-arch` measured ~25% slower prefill on GB10, so the explicit arch matters.)
 
@@ -86,11 +89,12 @@ GGUF (upstream decode measured flat May → July 2026):
 | **Decode** | Per-layer CUDA-graph capture; head-group flash-decode for dense and indexed attention (v0.4.0); aligned-quant dispatch tiers at every verify width | **1.33–1.47× across 2k–128k context** at the ship config ([chart](docs/v041_upstream_overlay.svg)) |
 | **Speculation** | DSpark lossless block drafter (3-layer target-fused, Q2K) + terminal yield-quench (net-positive per request, default on); armed at every depth since v0.4.0 — no kv-depth gate; break-even guard recalibrated to v0.4 verify cost in v0.4.1 | upstream MTP is single-token, net-negative single-stream; fork code-corpus band **1.10×** its own plain decode, adversarial prose 1.04× (typical quench floor 0.95–0.97×, bounded learning debt); the vs-upstream win is the headline |
 | **Serving** | Continuous batching (mid-flight admit/evict, chunked prefill interleave), per-bank warm start (~7× TTFT on shared prefixes), fork-by-copy fanout, OpenAI + Anthropic-shape APIs | upstream serves one stream |
+| **Thinking-mode turns** | Thinking conversations reuse KV on the continuous path and persist to the disk tier (v0.4.2, community fix by [@fabiopili](https://github.com/fabiopili), [PR #4](https://github.com/Entrpi/ds4/pull/4)) | turn-2 TTFT **53.9 s → 0.69 s** on a 29k-token thinking preamble (full re-prefill pre-fix vs `fork admit cached=32792`; DGX Spark, ctx 49152, 2026-07-24 stamp) |
 | **Ops** | Resident weight server (VMM-backed, IPC manifest) — engines import the 81 GiB model in seconds instead of multi-minute reloads; builds the aligned repack artifacts the fast kernels read in place | upstream reloads per process |
 | **Telemetry** | Per-step speculative trace + offline policy replayer (`tools/dspark_trace_replay.py`), quench/gate/profile counters | — |
 
 Every fork-side change is documented in the fork
-[`CHANGELOG.md`](https://github.com/Entrpi/ds4/blob/v0.4.1/CHANGELOG.md);
+[`CHANGELOG.md`](https://github.com/Entrpi/ds4/blob/v0.4.2/CHANGELOG.md);
 the [roofline analysis](#roofline-why-speculation-and-batching-are-the-levers)
 below explains why these are the changes that matter on this hardware.
 
@@ -105,7 +109,7 @@ curl -sSL https://raw.githubusercontent.com/entrpi/ds4-on-spark/main/install.sh 
 That one command:
 
 1. Verifies the host (aarch64, GB10/SM121, CUDA 13, ≥120 GiB free disk).
-2. Clones the `Entrpi/ds4` fork at tag **`v0.4.1`** into `~/code/ds4` (or `$DS4_SRC_DIR`).
+2. Clones the `Entrpi/ds4` fork at tag **`v0.4.2`** into `~/code/ds4` (or `$DS4_SRC_DIR`).
 3. Builds `ds4`, `ds4-server`, `ds4-bench` with `CUDA_ARCH=sm_121` in ~8 s.
 4. Downloads the Q2 GGUF (~81 GiB) + MTP GGUF (~3.6 GiB) from
    [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf)
@@ -116,7 +120,7 @@ That one command:
 6. Installs the **`ds4-serve`** launcher to `~/.local/bin`.
 7. Starts `ds4-server` on `:8000` with `-c 32768` serving the **full DSpark
    speculative stack** — lossless, suite mean **1.38× plain decode**, with the
-   yield-quench controller riding the v0.4.1 defaults (speculation armed at every depth; no kv-depth gate; guard recalibrated to v0.4 verify cost).
+   yield-quench controller riding the v0.4.2 defaults (speculation armed at every depth; no kv-depth gate; guard recalibrated to v0.4 verify cost).
 
 `--no-dspark` serves plain continuous decode instead (skips the drafter
 download); `--with-mtp` alone gives MTP-2 speculation (a modest ~1.08×).
@@ -165,7 +169,7 @@ curl -sSL https://raw.githubusercontent.com/entrpi/ds4-on-spark/main/install.sh 
 
 What happens to an existing setup:
 
-- **Your ds4 clone fast-forwards to the `v0.4.1` tag** (`git fetch` +
+- **Your ds4 clone fast-forwards to the `v0.4.2` tag** (`git fetch` +
   `reset --hard`, remote repointed automatically if you installed back when
   this repo cloned `antirez/ds4`). Any local edits in that clone are
   **discarded** — it's an installer-managed tree.
@@ -316,7 +320,8 @@ Hardware for every number in this README: a single DGX Spark — GB10,
 `sm_121`, `compute_cap=12.1`, CUDA 13.0.88 — measured through the real
 serving path ([`eugr/llama-benchy`](https://github.com/eugr/llama-benchy),
 non-streaming wall tok/s) unless marked engine-side. The headline numbers
-in one place (v0.4.1, 2026-07-22, unless marked with their stamp):
+in one place (measured at v0.4.1, 2026-07-22, and unchanged at v0.4.2 —
+a server-side warm-reuse fix — unless marked with their stamp):
 
 | metric | value | evidence |
 |---|---|---|
@@ -384,7 +389,7 @@ backend has since diverged where it counts: D2R tensor-core MoE prefill
 kernels, token-tile HMMA attention, per-layer CUDA-graph decode capture, a
 multi-sequence batched forward, and the weight-server import path — each
 documented in the fork
-[`CHANGELOG.md`](https://github.com/Entrpi/ds4/blob/v0.4.1/CHANGELOG.md).
+[`CHANGELOG.md`](https://github.com/Entrpi/ds4/blob/v0.4.2/CHANGELOG.md).
 
 Two inherited facts worth knowing as an operator: the engine attaches the
 mmap'd GGUF zero-copy via `cudaHostRegister` when the host allows it (the
