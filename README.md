@@ -209,10 +209,14 @@ What happens to an existing setup:
   file names — generation is detected from the base name:
   `GGUF_FILE=DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf DSPARK_FILE=DSpark-drafter-Q2K-Q8.gguf ./install.sh --start`
 - **If you keep the legacy files alongside 0731**: `ds4-serve` refuses the
-  legacy-MTP × 0731 pairing, but a bare `ds4-server` boot with launch
-  defaults can still auto-attach the legacy MTP file to a 0731 base — pass
-  `--no-mtp` there until the engine-side generation guard ships (scheduled
-  for v0.5.1).
+  legacy-MTP × 0731 pairing. A bare `ds4-server` boot with launch defaults
+  can still auto-attach the legacy MTP file to a 0731 base — as of v0.5.1
+  that is measured safe: the cross-generation pairing drafts at ~52%
+  accept (right at speculative break-even, ~equal to plain decode, and
+  lossless by construction), and the engine now watches every MTP module's
+  accept rate and loudly disables one that drafts near-random (a genuinely
+  wrong or corrupt file). For best speed still prefer the matched setup —
+  the DSpark drafter on 0731, or `--no-mtp` on mixed directories.
 - If a rebuild ever looks wrong after a big jump, `make -C ~/code/ds4 clean`
   and re-run.
 

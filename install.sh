@@ -36,23 +36,24 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-08-01): the Entrpi/ds4 fork release tag v0.5.0 —
-# the deep substrate release, shipped together with the
-# DeepSeek-V4-Flash-0731 weights refresh this installer now sets up.
-# Engine: the flat-pool arc (every per-layer activation requantize
-# retired, bit-exact), CUDA-graph capture at every context depth
-# (streaming top-512 selection, the old >8192-row capture cliff gone),
-# and the speculation break-even guard recalibrated to the 0731
-# identity. Records on this hardware: 515K-token admit at 776 tok/s,
-# ~960 tok/s prefill at 2k, served aggregate 59 tok/s at 12 concurrent
-# requests. Model: 0731 on the identical ship-recipe quant (MMLU 63.5
-# -> 79.5 on the frozen harness, needles 70/70; no MTP head — DSpark
-# is the only speculation, with a matching re-extracted drafter).
-# Standing release gates green on the tagged binary. Set
-# DS4_REF=main + DS4_REPO=antirez/ds4 for the upstream engine without
-# the fork's serving stack.
+# Pin (updated 2026-08-02): the Entrpi/ds4 fork release tag v0.5.1 —
+# the agentic-serving robustness fast-follow on the v0.5.0 deep
+# substrate release (0731 weights). Long-lived servers with disk KV get
+# their fixes: the demand-mapped KV pool releases evicted banks' pages
+# under budget pressure (the v0.5.0 known issue), disk-KV replay
+# survives cross-boot divergence (a truncated turn no longer strands
+# its record — 90 s cold re-prefill becomes a ~1 s partial restore),
+# deep conversations checkpoint at retire so a crash restores them
+# warm, and speculative support models are health-checked at the accept
+# counters. Perf identical to v0.5.0 (byte-exact serving twins):
+# 515K-token admit at 776 tok/s, ~960 tok/s prefill at 2k, served
+# aggregate 59 tok/s at 12 concurrent requests; 0731 quality unchanged
+# (MMLU 79.5, needles 70/70; DSpark-only speculation with the matching
+# re-extracted drafter). Standing release gates green on the tagged
+# binary. Set DS4_REF=main + DS4_REPO=antirez/ds4 for the upstream
+# engine without the fork's serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.5.0}"
+DS4_REF="${DS4_REF:-v0.5.1}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
