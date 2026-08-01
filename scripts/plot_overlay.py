@@ -127,6 +127,17 @@ def panel(rows_b, rows_u, key, x0, x1, y0, y1, title, fmt_call, n_yticks=5):
 
     out.append(callout(0, False))
     out.append(callout(n - 1, True))
+
+    # per-series mean/max stats block, bottom-left inside the plot area
+    # (the band between the lines never reaches this strip: both series'
+    # minima sit well above the x-axis at every stamp so far)
+    def stats(vals):
+        return sum(vals) / len(vals), max(vals)
+    bm, bx = stats(vb)
+    um, ux = stats(vu)
+    sx = x0 + 10
+    out.append(f'<text class="stat-fork" x="{sx}" y="{y1-24:.1f}">mean {bm:,.1f} · max {bx:,.1f}</text>')
+    out.append(f'<text class="stat-upstream" x="{sx}" y="{y1-9:.1f}">mean {um:,.1f} · max {ux:,.1f}</text>')
     return "\n".join(out)
 
 
@@ -171,6 +182,8 @@ def main():
   .dot-fork      {{ fill: {BRANCH}; }}
   .gain {{ fill: {BRANCH}; fill-opacity: 0.18; stroke: none; }}
   .loss {{ fill: #d64545; fill-opacity: 0.16; stroke: none; }}
+  .stat-fork     {{ font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: {BRANCH}; }}
+  .stat-upstream {{ font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: {UPSTREAM}; }}
 </style>
 <rect class="bg" x="0" y="0" width="1200" height="470"/>
 <text class="title" x="600" y="30" text-anchor="middle">{html.escape(a.title)}</text>

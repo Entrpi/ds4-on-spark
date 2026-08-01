@@ -7,10 +7,10 @@ your Spark with one command, serving **DeepSeek-V4-Flash** entirely on-device
 (GB10 / SM121, 128 GB unified memory — ~119 GiB usable; RTX PRO 6000 /
 5090-class `sm_120` also builds).
 
-Compared to the upstream engine you get **double the prefill throughput**
-(2.2× on GB10 vs current upstream main, 2026-07-21; ~4× on a PRO 6000 at
-the v0.1.0 stamp), **1.33–1.47× the decode speed across the full 2k–128k
-context range**, and a rich serving experience
+Compared to the upstream engine you get **2.4–3.3× the prefill throughput**
+(GB10 vs upstream main rebuilt native, 2026-08-01, same gguf; ~4× on a
+PRO 6000 at the v0.1.0 stamp), **1.33–1.47× the decode speed across the
+full 2k–128k context range**, and a rich serving experience
 upstream doesn't have: **continuous batching**, **prefix caching** (warm
 start cuts time-to-first-token ~7× on shared prefixes, with fork-by-copy
 fan-out for parallel branches), and **DSpark lossless speculative decode** —
@@ -21,12 +21,13 @@ model, and the engineering story follow below. Upstream remains the
 architectural foundation and the model recipe — this repo pins and packages
 the fork.
 
-**Prefill and decode vs upstream, across the context frontier** (upstream
-`main` at `efdadd4`, measured 2026-07-21/22 on the same box, same GGUF and
-instrument as the fork's v0.4.1 line; the fork line is the launch-default
-ship config this installer boots):
+**Prefill and generation vs upstream, across the context frontier** (upstream
+`main` at `54b36ed` rebuilt native `sm_121`, measured 2026-08-01 on the same
+box, same instrument, both lines on the same DeepSeek-V4-Flash-**0731** gguf;
+the fork line is the launch-default ship config this installer boots —
+2.43× prefill at 2k, 3.30× at 64k):
 
-![Throughput across context frontiers: upstream antirez/ds4 main vs the fork at v0.4.1](docs/v041_upstream_overlay.svg)
+![Throughput across context frontiers: upstream antirez/ds4 main vs the fork at v0.5.0](docs/v050_upstream_overlay.svg)
 
 **Decode at the ship config** (DSpark + yield-quench; since v0.4.0 there is
 no kv-depth gate — speculation is armed at every depth and the quench
@@ -41,27 +42,30 @@ post-quench serving measured identical to plain (forced-quench identity
 ![Ship decode across context frontiers: plain vs DSpark with quench, two corpora, upstream reference](docs/v041_decode_overlay.svg)
 
 **Status:** Working end-to-end, pinned to the fork release
-[**`v0.4.2`**](https://github.com/Entrpi/ds4/blob/v0.4.2/CHANGELOG.md) — the
-deep-decode substrate line plus the quench recalibration and the
-community-contributed thinking-mode warm reuse (v0.4.2: thinking turns
-reuse KV on the continuous path instead of cold re-prefilling every
-turn, and thinking banks now persist to the disk KV tier): head-group
-flash-decode for dense and indexed attention, aligned dense tiers at every
-verify width, speculation armed at every depth (the static 64k kv-depth
-gate is gone; the yield-quench controller is the only governor), and the
-quench break-even guard recalibrated to v0.4's measured verify cost
-(v0.4.1: the v0.1.1-era guard was terminally quenching winners; code-corpus
-band 1.10× vs plain, adversarial prose 1.04×). Deep serving decode dropped
-27–35 % release-over-release at v0.4.0 and holds at v0.4.1 (240K-context
-conversations decode at 57.3 ms/tok, 515K at 59.9, 12K at 36.6 —
-fresh-boot turn-2 stamps quoted with their speculative tok/step in the
-fork changelog), the 762K-token deep-context charter passes, and the full
-quality restamp is band-exact against the prior release (needles 70/70,
-zero eval errors; v0.4.1 is a controller-constant change with all-zero
-tensor deltas). Since v0.2.2 the engine builds its aligned fast-path
-weight artifacts in-process at boot, so **installer setups get the same
-decode/prefill tier as weight-server setups out of the box** (the active
-tier shows in the boot log and `/v1/stats`). Speculative gain is
+[**`v0.5.0`**](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md) — the
+deep substrate release, shipped together with the
+**DeepSeek-V4-Flash-0731** weights refresh this installer now sets up.
+Engine side: the flat-pool arc is closed (every per-layer activation
+requantize retired, bit-exactly), CUDA-graph capture covers every
+context depth (a streaming top-512 selection tier replaced the old
+>8192-row capture cliff; deep decode at 240K dropped ~11% ms/tok), and
+the speculation break-even guard is recalibrated to the 0731 identity.
+Records on this hardware: a 515K-token admit at 776 tok/s, ~960 tok/s
+prefill at 2k (the best frontier crosses 1,000), and served aggregate
+throughput of 59 tok/s at 12 concurrent requests — double the previous
+stamp. Model side: same ship-recipe quant, dramatically stronger
+knowledge recall (MMLU 63.5 → 79.5 on the frozen harness, needles
+70/70 through 130K real tokens, HumanEval 89.0 cap-corrected), with
+honest deltas documented in the fork changelog (0731 writes longer on
+open instructions and terser on deep retrieval; IFEval moves with it).
+The 0731 checkpoint has **no MTP head** — DSpark is the only
+speculation, with a matching re-extracted drafter, and the installer
+now manages the whole weight upgrade (old-generation files detected
+and optionally removed, prompted, never silent). Since v0.2.2 the
+engine builds its aligned fast-path weight artifacts in-process at
+boot, so **installer setups get the same decode/prefill tier as
+weight-server setups out of the box** (the active tier shows in the
+boot log and `/v1/stats`). Speculative gain is
 content-dependent (structured / code / math wins; adversarial prose sits
 at 1.04× geomean behind the quench governor, typical floor 0.95–0.97× —
 bounded learning debt, see the fork CHANGELOG v0.4.1) — see the
@@ -72,8 +76,8 @@ stepwise math) predates v0.4.0's much faster plain baseline. Prefill runs
 ~2.2× the upstream engine on GB10 (D2R tensor-core MoE GEMMs, measured
 against upstream main 2026-07-21). The Metal backend is unaffected.
 
-- **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine (CUDA backend landed 2026-05-11). **This repo pins the [`Entrpi/ds4`](https://github.com/Entrpi/ds4) fork at release [`v0.4.2`](https://github.com/Entrpi/ds4/blob/v0.4.2/CHANGELOG.md)** (2026-07-24): the deep-decode substrate line — everything through v0.2's robust serving (continuous batching, crash fixes, tools/thinking speculation on the continuous path, deep-context capacity, FP8/FP4 packed compressed-KV as the default primaries, observability), v0.3's tensor-core batched scorer and durable pinned banks (deep conversations survive eviction and restarts), v0.4's head-group flash-decode for dense and indexed attention, aligned dense verify tiers, MoE gate_up expert dedup, speculation armed at every depth (quench governing, no kv-depth gate) plus a community-contributed reap of queued requests whose client disconnected, v0.4.1's quench recalibration (the break-even guard now tracks v0.4's measured verify cost), and v0.4.2's community-contributed thinking-mode warm reuse (thinking turns reuse KV on the continuous path instead of cold re-prefilling; thinking banks now persist to the disk KV tier). The fork `CHANGELOG.md` documents every fork-side change.
-- **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf) — 81 GiB asymmetric quant: IQ2_XXS for routed-expert gate/up, Q2_K for routed-expert down (these dominate model bytes), Q8_0 for everything else dense (shared expert, attention projections, output head, router), F16 for LoRA matrices and the compressor/indexer, F32 norms. (FP8 in ds4 is a *runtime* KV-cache quantization — E4M3FN round-trip — not a stored weight format.) Plus an optional 3.6 GiB MTP draft GGUF.
+- **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine (CUDA backend landed 2026-05-11). **This repo pins the [`Entrpi/ds4`](https://github.com/Entrpi/ds4) fork at release [`v0.5.0`](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md)** (2026-08-01): the deep-decode substrate line — everything through v0.2's robust serving (continuous batching, crash fixes, tools/thinking speculation on the continuous path, deep-context capacity, FP8/FP4 packed compressed-KV as the default primaries, observability), v0.3's tensor-core batched scorer and durable pinned banks (deep conversations survive eviction and restarts), v0.4's head-group flash-decode for dense and indexed attention, aligned dense verify tiers, MoE gate_up expert dedup, speculation armed at every depth (quench governing, no kv-depth gate) plus a community-contributed reap of queued requests whose client disconnected, v0.4.1's quench recalibration (the break-even guard now tracks v0.4's measured verify cost), v0.4.2's community-contributed thinking-mode warm reuse, and v0.5.0's flat-pool arc + capture-at-every-depth + 0731 cutover (quench guard recalibrated to the new model identity; MTP retired with the 0731 checkpoint). The fork `CHANGELOG.md` documents every fork-side change.
+- **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf) — the **DeepSeek-V4-Flash-0731** ~81 GiB asymmetric quant: IQ2_XXS for routed-expert gate/up, Q2_K for routed-expert down (these dominate model bytes), Q8_0 for everything else dense (shared expert, attention projections, output head, router), F16 for LoRA matrices and the compressor/indexer, F32 norms. (FP8 in ds4 is a *runtime* KV-cache quantization — E4M3FN round-trip — not a stored weight format.) Plus the ~7 GiB DSpark drafter from [`bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF`](https://huggingface.co/bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF); the 0731 checkpoint has no MTP head, so there is no MTP gguf for it (the legacy MTP file pairs only with the legacy base).
 - **Hardware:** NVIDIA DGX Spark, GB10, SM121, 128 GB LPDDR5X unified (~119 GiB usable). The donor's `Makefile` has a `make cuda-spark` target that builds native `sm_121`, plus `make cuda CUDA_ARCH=sm_NNN` for an explicit override — both GB10-correct with no patches needed. (Building with an empty `-arch` measured ~25% slower prefill on GB10, so the explicit arch matters.)
 
 ## What the fork adds over upstream
@@ -169,21 +173,32 @@ curl -sSL https://raw.githubusercontent.com/entrpi/ds4-on-spark/main/install.sh 
 
 What happens to an existing setup:
 
-- **Your ds4 clone fast-forwards to the `v0.4.2` tag** (`git fetch` +
+- **Your ds4 clone fast-forwards to the pinned tag** (`git fetch` +
   `reset --hard`, remote repointed automatically if you installed back when
   this repo cloned `antirez/ds4`). Any local edits in that clone are
   **discarded** — it's an installer-managed tree.
-- **GGUFs you already have are kept** (size-checked, not re-downloaded). Two
-  new downloads happen on upgrade: the DSpark drafter (~6.5 GiB) and — if you
-  installed before 2026-07-13 — the **imatrix base quant** (~81 GiB): the old
-  installer default pointed at the plain `chat-v2.gguf` while the quality
-  baselines were all measured on `chat-v2-imatrix.gguf`; the default now
-  matches the validated build. To keep serving your existing non-imatrix
-  file instead (and skip the 81 GiB):
-  `GGUF_FILE=DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf ./install.sh --start`
-- **The default serve mode changes** from plain decode to the DSpark
-  speculative stack (same OpenAI-compatible API, lossless output, ~10 GiB
-  more unified memory in use). `--no-dspark` restores the old behaviour.
+- **The model generation moves to the DeepSeek-V4-Flash-0731 weights**: the
+  installer downloads the 0731 imatrix base (~87 GiB) and the matching 0731
+  DSpark drafter (~7 GiB). The 0731 checkpoint has **no MTP head** (the
+  single-block MTP module was replaced upstream by the DSpark stages), so no
+  MTP file is downloaded and the serve fallback ladder for 0731 is
+  DSpark → plain — the launcher refuses to pair the legacy MTP file with a
+  0731 base.
+- **Previous-generation weights are detected and offered for removal**
+  (old base + old MTP + old drafter, ~91 GiB — the old drafter was distilled
+  against the old base's hidden states and would crater speculative accept on
+  0731). Removal is **optional and prompted**, and only happens after the new
+  weights pass the smoke test — unless disk space forces it first, in which
+  case the installer asks (or honors a flag) *before* downloading:
+  - `--remove-old-weights` — no prompt; delete (before the download only when
+    space requires it, otherwise after the smoke test passes).
+  - `--keep-old-weights` — no prompt; keep (the upgrade stops early with a
+    clear message if the download cannot fit alongside them).
+  - no flag — interactive prompt when a terminal is attached; otherwise the
+    old files are kept and a warning says so.
+- **To stay on the previous generation** (and keep the MTP path), pin the old
+  file names — generation is detected from the base name:
+  `GGUF_FILE=DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf DSPARK_FILE=DSpark-drafter-Q2K-Q8.gguf ./install.sh --start`
 - If a rebuild ever looks wrong after a big jump, `make -C ~/code/ds4 clean`
   and re-run.
 
@@ -414,7 +429,7 @@ batched decode, which wins above N=1 today.
 Measured at the ship default (v0.1.1, ctx 69632, pp=2048 tg=256 per request,
 W&P prose — the adversarial floor corpus for the solo point):
 
-![Served decode throughput vs concurrency at the ship default](docs/v011_conc_throughput.svg)
+![Served decode throughput vs concurrency at the ship default](docs/v050_conc_throughput.svg)
 
 Aggregate decode rises 18 → 30 tok/s and saturates around 4 concurrent
 requests; per-request throughput falls as requests share the machine
@@ -468,8 +483,10 @@ scripts/
 bench/
   bw_bench.cu                 Kernel-side memory-bandwidth probe
 docs/
-  v041_upstream_overlay.svg   Prefill + decode vs upstream main across context (v0.4.1, 2026-07-22)
-  v041_decode_overlay.svg     Ship decode, two corpora + upstream reference (v0.4.1)
+  v050_upstream_overlay.svg   Prefill + generation vs upstream main across context (v0.5.0, 2026-08-01, both lines on the 0731 gguf)
+  v050_conc_throughput.svg    Served aggregate throughput vs concurrency (v0.5.0)
+  v041_upstream_overlay.svg   v0.4.1 predecessor (kept for history)
+  v041_decode_overlay.svg     Ship decode, two corpora + upstream reference (v0.4.1 stamp; refresh queued behind the deep long-output prompt variant)
   v040_upstream_overlay.svg   v0.4.0 predecessors (kept for history)
   v040_decode_overlay.svg
   v010_sweep_overlay.svg      v0.1.0 predecessor of the upstream overlay (kept for history)

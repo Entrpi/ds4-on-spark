@@ -25,9 +25,9 @@ set -euo pipefail
 
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
-GGUF_FILE="${GGUF_FILE:-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf}"
+GGUF_FILE="${GGUF_FILE:-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf}"
 MTP_FILE="${MTP_FILE:-DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf}"
-DSPARK_FILE="${DSPARK_FILE:-DSpark-drafter-Q2K-Q8.gguf}"
+DSPARK_FILE="${DSPARK_FILE:-DSpark-drafter-Q2K-Q8-0731.gguf}"
 
 BASE="$DS4_GGUF_DIR/$GGUF_FILE"
 MTP="$DS4_GGUF_DIR/$MTP_FILE"
@@ -47,11 +47,19 @@ done
 [ -x "$BIN" ] || { echo "ds4-serve: $BIN not found (set DS4_SRC_DIR or run the installer)" >&2; exit 1; }
 [ -f "$BASE" ] || { echo "ds4-serve: base model $BASE missing (set DS4_GGUF_DIR / GGUF_FILE)" >&2; exit 1; }
 
+# 0731-generation bases have no MTP head (the module was replaced upstream by
+# the DSpark stages): the legacy MTP GGUF is a DIFFERENT module and must never
+# be paired with them, so the downgrade ladder skips MTP entirely.
+mtp_ok=1
+case "$GGUF_FILE" in *-0731*) mtp_ok=0 ;; esac
+
 if [ "$mode" = dspark ] && [ ! -f "$DRAFTER" ]; then
     echo "ds4-serve: DSpark GGUF missing under $DS4_GGUF_DIR — downgrading" >&2
-    mode=mtp
+    if [ "$mtp_ok" = 1 ]; then mode=mtp; else mode=plain; fi
 fi
-if [ "$mode" = mtp ] && [ ! -f "$MTP" ]; then
+if [ "$mode" = mtp ] && { [ "$mtp_ok" = 0 ] || [ ! -f "$MTP" ]; }; then
+    [ "$mtp_ok" = 0 ] && [ -f "$MTP" ] && \
+        echo "ds4-serve: legacy MTP GGUF present but incompatible with the 0731 base — serving plain" >&2
     mode=plain
 fi
 

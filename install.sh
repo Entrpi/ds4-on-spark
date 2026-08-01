@@ -8,15 +8,19 @@
 #
 #   1. Verifies the host is a DGX Spark (or other GB10/SM121 system) with
 #      CUDA 13 toolkit installed and >= 120 GiB free disk for the GGUFs.
-#   2. Clones (or fast-forwards) the ds4 fork at tag v0.2.2 into $DS4_SRC_DIR.
+#   2. Clones (or fast-forwards) the ds4 fork at the pinned tag into $DS4_SRC_DIR.
 #   3. Builds ds4, ds4-server, ds4-bench with CUDA_ARCH=sm_121.
-#   4. Downloads the Q2 quantized GGUF (~81 GiB) + MTP GGUF (~3.6 GiB) from
-#      antirez/deepseek-v4-gguf and the DSpark Q2K drafter (~6.5 GiB) from
-#      bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF into $DS4_GGUF_DIR.
+#   4. Downloads the 0731 Q2 quantized GGUF (~87 GiB) from
+#      antirez/deepseek-v4-gguf and the matching 0731 DSpark Q2K drafter
+#      (~7 GiB) into $DS4_GGUF_DIR. The 0731 base has NO MTP head (the
+#      single-block MTP module was replaced upstream by the DSpark
+#      stages), so nothing MTP is downloaded for it. Previous-generation
+#      weights are detected and offered for removal — prompted, optional,
+#      and never silent (see --remove-old-weights / --keep-old-weights).
 #   5. Runs a single-prompt smoke test against the canonical
 #      "capital of France" prompt — expects "Paris" in the output.
 #   6. Optionally (--start) serves the full DSpark speculative stack on
-#      $DS4_PORT (lossless; yield-quench + kv-gate ride the v0.2.2 defaults).
+#      $DS4_PORT (lossless; yield-quench rides the launch defaults).
 #      --no-dspark serves plain continuous decode instead.
 #
 # The script makes NO changes outside:
@@ -32,29 +36,23 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-07-24): the Entrpi/ds4 fork release tag v0.4.2.
-# Everything in v0.4.0 (deep-decode substrate: head-group
-# flash-decode for dense and indexed attention, aligned Q8_0 dense
-# tier at all verify widths, indexer scorer token-loop, MoE gate_up
-# expert dedup, speculation armed at every depth, the contributed
-# queued-client zombie reap, the ds4-bench 32K+ fix) plus the v0.4.1
-# quench recalibration: the speculation break-even guard now tracks
-# v0.4's measured verify cost (2.22 -> 2.10; the v0.1.1-era guard was
-# terminally quenching winners). Code-corpus decode 1.10x own plain,
-# adversarial prose 1.04x (typical quench floor 0.95-0.97x, bounded
-# learning debt; post-quench serving identical to plain). Deep
-# stamps hold: 240K 57.3 ms/tok, 515K 59.9, 12K 36.6. v0.4.2 adds the
-# community-contributed thinking-mode warm reuse on the continuous
-# path (thinking turns reuse KV instead of cold re-prefilling, and
-# thinking banks now persist to the disk KV tier). Standing
-# release gates green on the tagged binary. The engine
-# builds its aligned fast-path artifacts in-process at boot (since
-# v0.2.2), so this installer's standalone server rides the full perf
-# tier (stated in the boot log). Set
+# Pin (updated 2026-08-01): the Entrpi/ds4 fork release tag v0.5.0 —
+# the deep substrate release, shipped together with the
+# DeepSeek-V4-Flash-0731 weights refresh this installer now sets up.
+# Engine: the flat-pool arc (every per-layer activation requantize
+# retired, bit-exact), CUDA-graph capture at every context depth
+# (streaming top-512 selection, the old >8192-row capture cliff gone),
+# and the speculation break-even guard recalibrated to the 0731
+# identity. Records on this hardware: 515K-token admit at 776 tok/s,
+# ~960 tok/s prefill at 2k, served aggregate 59 tok/s at 12 concurrent
+# requests. Model: 0731 on the identical ship-recipe quant (MMLU 63.5
+# -> 79.5 on the frozen harness, needles 70/70; no MTP head — DSpark
+# is the only speculation, with a matching re-extracted drafter).
+# Standing release gates green on the tagged binary. Set
 # DS4_REF=main + DS4_REPO=antirez/ds4 for the upstream engine without
 # the fork's serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.4.2}"
+DS4_REF="${DS4_REF:-v0.5.0}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
@@ -62,14 +60,24 @@ CUDA_ARCH="${CUDA_ARCH:-sm_121}"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc 2>/dev/null || echo 4)}"
 
 HF_REPO="${HF_REPO:-antirez/deepseek-v4-gguf}"
-# The imatrix-tuned q2 — the build all fork quality baselines were stamped on
-# (the repo also hosts a plain chat-v2.gguf; the old default named it while
-# claiming imatrix).
-GGUF_FILE="${GGUF_FILE:-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf}"
+# The 0731-refresh imatrix-tuned q2 (DeepSeek-V4-Flash-0731 weights, same
+# ship recipe the fork quality baselines are stamped on). Overriding
+# GGUF_FILE back to the pre-0731 name restores the full legacy behavior,
+# including the MTP download — generation is detected from the file name.
+GGUF_FILE="${GGUF_FILE:-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf}"
 MTP_FILE="${MTP_FILE:-DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf}"
 
 DSPARK_HF_REPO="${DSPARK_HF_REPO:-bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF}"
-DSPARK_FILE="${DSPARK_FILE:-DSpark-drafter-Q2K-Q8.gguf}"
+DSPARK_FILE="${DSPARK_FILE:-DSpark-drafter-Q2K-Q8-0731.gguf}"
+
+# Previous-generation weight files (the pre-0731 set). These are what the
+# upgrade path detects and offers to remove: the old base is superseded, the
+# old MTP head does not exist in the 0731 checkpoint (module replaced), and
+# the old drafter was distilled against the old base's hidden states — all
+# three are dead weight next to a 0731 install (~91 GiB total).
+LEGACY_GGUF_FILE="DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf"
+LEGACY_MTP_FILE="DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
+LEGACY_DSPARK_FILE="DSpark-drafter-Q2K-Q8.gguf"
 
 DS4_PORT="${DS4_PORT:-8000}"
 DS4_CTX="${DS4_CTX:-32768}"
@@ -80,6 +88,8 @@ SKIP_DOWNLOAD=0
 SKIP_MTP=0
 SKIP_SMOKE=0
 START_SERVER=0
+REMOVE_OLD=0
+KEEP_OLD=0
 # DSpark speculative decode is the default serving mode since v0.1.1 (suite
 # mean 1.38x plain; net-positive per request via the yield-quench controller).
 # --no-dspark serves plain continuous decode instead.
@@ -97,11 +107,18 @@ Flags:
   --no-download           Skip GGUF download.
   --with-mtp              (default) Download the MTP speculative-decode GGUF.
   --with-dspark           (default) Serve with DSpark speculative decode —
-                          downloads the ~6.5 GiB Q2K drafter from
+                          downloads the ~7 GiB Q2K drafter from
                           $DSPARK_HF_REPO.
   --no-dspark             Serve plain continuous decode (no drafter download).
   --no-smoke              Skip post-install smoke test.
   --start                 Start ds4-server on :$DS4_PORT after install.
+  --remove-old-weights    Delete previous-generation GGUFs without prompting.
+                          When disk space is short they are removed BEFORE the
+                          download; otherwise only after the new weights pass
+                          the smoke test.
+  --keep-old-weights      Keep previous-generation GGUFs, skip the prompt
+                          (upgrade still fails early if they must go to make
+                          the download fit).
   --src-dir DIR           Where to put antirez/ds4 source (default: $DS4_SRC_DIR).
   --gguf-dir DIR          Where to put GGUF weights (default: $DS4_GGUF_DIR).
   --cuda-arch ARCH        nvcc -arch flag (default: $CUDA_ARCH).
@@ -127,6 +144,8 @@ while [[ $# -gt 0 ]]; do
         --no-mtp) SKIP_MTP=1; shift ;;
         --no-smoke) SKIP_SMOKE=1; shift ;;
         --start) START_SERVER=1; shift ;;
+        --remove-old-weights) REMOVE_OLD=1; shift ;;
+        --keep-old-weights) KEEP_OLD=1; shift ;;
         --src-dir) DS4_SRC_DIR="$2"; shift 2 ;;
         --gguf-dir) DS4_GGUF_DIR="$2"; shift 2 ;;
         --cuda-arch) CUDA_ARCH="$2"; shift 2 ;;
@@ -140,6 +159,23 @@ done
 GGUF_PATH="$DS4_GGUF_DIR/$GGUF_FILE"
 MTP_PATH="$DS4_GGUF_DIR/$MTP_FILE"
 DSPARK_PATH="$DS4_GGUF_DIR/$DSPARK_FILE"
+
+# Model generation, detected from the base file name so env overrides keep
+# working in both directions. The 0731 checkpoint has no MTP head: the
+# single-block MTP module was replaced upstream by the DSpark stages, so the
+# legacy MTP GGUF must never be paired with a 0731 base.
+if [[ "$GGUF_FILE" == *-0731* ]]; then
+    MODEL_GEN="0731"
+    MTP_SUPPORTED=0
+else
+    MODEL_GEN="legacy"
+    MTP_SUPPORTED=1
+fi
+
+if [[ "$REMOVE_OLD" -eq 1 ]] && [[ "$KEEP_OLD" -eq 1 ]]; then
+    echo "Pass at most one of --remove-old-weights / --keep-old-weights." >&2
+    exit 2
+fi
 
 c_red()   { printf '\033[31m%s\033[0m' "$*"; }
 c_green() { printf '\033[32m%s\033[0m' "$*"; }
@@ -194,10 +230,15 @@ verify_host() {
     local free_gib
     free_gib=$(df -BG "$HOME" | awk 'NR==2 {gsub("G","",$4); print $4}')
     if (( free_gib < 120 )); then
-        if [[ "$SKIP_DOWNLOAD" -eq 0 ]]; then
+        if [[ -f "$DS4_GGUF_DIR/$LEGACY_GGUF_FILE" ]] || [[ -f "$GGUF_PATH" ]]; then
+            # Upgrade or partial install: the real space math (including the
+            # optional old-weight removal) runs in upgrade_preflight.
+            warn "Only ${free_gib} GiB free under $HOME — deferring to the upgrade space check."
+        elif [[ "$SKIP_DOWNLOAD" -eq 0 ]]; then
             die "Need >= 120 GiB free under $HOME; have ${free_gib} GiB. Pass --no-download to skip GGUF, or free space."
+        else
+            warn "Only ${free_gib} GiB free under $HOME; --no-download is set, continuing."
         fi
-        warn "Only ${free_gib} GiB free under $HOME; --no-download is set, continuing."
     fi
     ok "Host checks passed."
 }
@@ -247,6 +288,119 @@ clone_and_build() {
 }
 
 # ============================================================================
+# 2b. upgrade path — previous-generation weight detection + optional removal
+# ============================================================================
+
+# Filled by upgrade_scan: absolute paths of legacy files present on disk.
+LEGACY_PRESENT=()
+LEGACY_BYTES=0
+
+file_bytes() { stat -c%s "$1" 2>/dev/null || stat -f%z "$1" 2>/dev/null || echo 0; }
+gib() { awk -v b="$1" 'BEGIN{printf "%.1f", b/1073741824}'; }
+
+upgrade_scan() {
+    LEGACY_PRESENT=(); LEGACY_BYTES=0
+    [[ "$MODEL_GEN" == "0731" ]] || return 0   # nothing is "old" for a legacy install
+    local f
+    for f in "$LEGACY_GGUF_FILE" "$LEGACY_MTP_FILE" "$LEGACY_DSPARK_FILE"; do
+        local p="$DS4_GGUF_DIR/$f"
+        if [[ -f "$p" ]]; then
+            LEGACY_PRESENT+=("$p")
+            LEGACY_BYTES=$(( LEGACY_BYTES + $(file_bytes "$p") ))
+        fi
+    done
+    [[ ${#LEGACY_PRESENT[@]} -gt 0 ]] || return 0
+
+    log "Upgrade: previous-generation weights found in $DS4_GGUF_DIR:"
+    for p in "${LEGACY_PRESENT[@]}"; do
+        printf '    %7s GiB  %s\n' "$(gib "$(file_bytes "$p")")" "${p##*/}"
+    done
+    log "They are dead weight next to a 0731 install ($(gib "$LEGACY_BYTES") GiB reclaimable):"
+    log "  - the old base is superseded by the 0731 refresh;"
+    log "  - the old MTP head has no 0731 counterpart (module replaced upstream)"
+    log "    and must never be served with a 0731 base;"
+    log "  - the old drafter was distilled against the old base and would crater"
+    log "    speculative accept on 0731 (output stays correct, speed does not)."
+}
+
+# ask_remove_old "when" -> 0 = remove, 1 = keep. Honors the two flags; reads
+# the answer from /dev/tty so `curl | bash` still prompts; non-interactive
+# runs without a flag keep the files (safe default) and say so.
+ask_remove_old() {
+    local when="$1"
+    [[ "$REMOVE_OLD" -eq 1 ]] && return 0
+    [[ "$KEEP_OLD"  -eq 1 ]] && return 1
+    # A controlling terminal must actually OPEN — permission bits on the
+    # /dev/tty node pass even in detached (cron/CI) contexts.
+    if ( : < /dev/tty ) 2>/dev/null; then
+        local ans=""
+        printf 'Remove the %s previous-generation file(s) (%s GiB) %s? [y/N] ' \
+            "${#LEGACY_PRESENT[@]}" "$(gib "$LEGACY_BYTES")" "$when" > /dev/tty
+        read -r ans < /dev/tty || true
+        [[ "$ans" =~ ^[Yy] ]]
+    else
+        warn "Non-interactive and neither --remove-old-weights nor --keep-old-weights given — keeping old weights."
+        return 1
+    fi
+}
+
+remove_old_weights() {
+    local p
+    for p in "${LEGACY_PRESENT[@]}"; do
+        log "Removing ${p##*/} ($(gib "$(file_bytes "$p")") GiB)"
+        rm -f -- "$p"
+    done
+    ok "Previous-generation weights removed ($(gib "$LEGACY_BYTES") GiB reclaimed)."
+    LEGACY_PRESENT=(); LEGACY_BYTES=0
+}
+
+# Decide whether the download fits with the old weights still on disk. If it
+# does not, removal (consented) happens BEFORE the download; the resumable
+# curl means a failed download can always be re-run.
+upgrade_preflight() {
+    [[ "$SKIP_DOWNLOAD" -eq 0 ]] || return 0
+    [[ ${#LEGACY_PRESENT[@]} -gt 0 ]] || return 0
+
+    local need=0 free_b
+    # Bytes still to download: new base + drafter, minus whatever is present.
+    [[ -f "$GGUF_PATH"   ]] || need=$(( need + 94489280512 ))  # ~88 GiB ceiling
+    if [[ "$WITH_DSPARK" -eq 1 ]] && [[ ! -f "$DSPARK_PATH" ]]; then
+        need=$(( need + 8589934592 ))                          # ~8 GiB ceiling
+    fi
+    free_b=$( (df -B1 "$DS4_GGUF_DIR" 2>/dev/null || true) | awk 'NR==2{print $4}')
+    free_b=${free_b:-0}
+
+    if (( free_b >= need )); then
+        return 0   # fits alongside; the removal offer comes after the smoke test
+    fi
+    warn "Free space under $DS4_GGUF_DIR is $(gib "$free_b") GiB; the remaining download needs ~$(gib "$need") GiB."
+    if (( free_b + LEGACY_BYTES < need )); then
+        die "Even removing the old weights ($(gib "$LEGACY_BYTES") GiB) will not fit the download. Free space and re-run."
+    fi
+    log "Removing the previous-generation weights first would make it fit."
+    if ask_remove_old "now, before the download"; then
+        remove_old_weights
+    else
+        die "Not enough space with the old weights kept. Re-run with --remove-old-weights (or free space) to upgrade."
+    fi
+}
+
+# After the new weights exist and the smoke test passed, offer the (optional)
+# cleanup — never before the new base is proven to answer.
+upgrade_cleanup_offer() {
+    [[ ${#LEGACY_PRESENT[@]} -gt 0 ]] || return 0
+    if [[ "$SKIP_SMOKE" -eq 1 ]] && [[ "$REMOVE_OLD" -eq 0 ]]; then
+        warn "Smoke test was skipped — keeping old weights (remove manually or re-run with --remove-old-weights)."
+        return 0
+    fi
+    if ask_remove_old "now that the new weights passed the smoke test"; then
+        remove_old_weights
+    else
+        log "Keeping previous-generation weights (re-run with --remove-old-weights to reclaim $(gib "$LEGACY_BYTES") GiB)."
+    fi
+}
+
+# ============================================================================
 # 3. download GGUFs (curl, resumable)
 # ============================================================================
 
@@ -266,8 +420,8 @@ download_one() {
         warn "Existing $file is $local_size B, expected $remote_size B — resuming."
     fi
     mkdir -p "$DS4_GGUF_DIR"
-    log "Downloading $file from $HF_REPO ..."
-    curl -L --fail --progress-bar -C - -o "$dest" "$url"
+    log "Downloading $file from $repo ..."
+    curl -L --fail --progress-bar -C - -o "$dest" "$url" || return 1
     ok "Downloaded $file"
 }
 
@@ -277,11 +431,19 @@ download_models() {
         return
     fi
     download_one "$GGUF_FILE" "$GGUF_PATH"
-    if [[ "$WITH_MTP" -eq 1 ]] && [[ "$SKIP_MTP" -eq 0 ]]; then
+    if [[ "$MTP_SUPPORTED" -eq 0 ]]; then
+        if [[ "$WITH_MTP" -eq 1 ]] && [[ "$SKIP_MTP" -eq 0 ]]; then
+            log "MTP: nothing to download — the 0731 base has no MTP head (module replaced upstream by the DSpark stages)."
+        fi
+    elif [[ "$WITH_MTP" -eq 1 ]] && [[ "$SKIP_MTP" -eq 0 ]]; then
         download_one "$MTP_FILE" "$MTP_PATH"
     fi
     if [[ "$WITH_DSPARK" -eq 1 ]]; then
-        download_one "$DSPARK_FILE" "$DSPARK_PATH" "$DSPARK_HF_REPO"
+        if ! download_one "$DSPARK_FILE" "$DSPARK_PATH" "$DSPARK_HF_REPO"; then
+            warn "DSpark drafter $DSPARK_FILE not downloadable from $DSPARK_HF_REPO (not published yet?)."
+            warn "Continuing without it — the server will boot plain; re-run the installer later to pick it up."
+            rm -f -- "$DSPARK_PATH"
+        fi
     fi
 }
 
@@ -341,16 +503,18 @@ start_server() {
     [[ -f "$GGUF_PATH" ]] || die "$GGUF_PATH missing — cannot start server."
 
     local flags=()
-    if [[ "$WITH_DSPARK" -eq 1 ]]; then
-        [[ -f "$MTP_PATH" ]] || die "$MTP_PATH missing — --with-dspark needs the MTP GGUF."
-        [[ -f "$DSPARK_PATH" ]] || die "$DSPARK_PATH missing — build it with gguf-tools/dspark_extract.py (README: DSpark)."
-        log "Starting ds4-server with DSpark speculative decode (yield-quench + kv-gate ride the v0.2.2 defaults)."
-    elif [[ "$WITH_MTP" -eq 1 ]] && [[ -f "$MTP_PATH" ]]; then
+    if [[ "$WITH_DSPARK" -eq 1 ]] && [[ -f "$DSPARK_PATH" ]]; then
+        log "Starting ds4-server with DSpark speculative decode (MTP head dropped when a drafter is armed)."
+    elif [[ "$MTP_SUPPORTED" -eq 1 ]] && [[ "$WITH_MTP" -eq 1 ]] && [[ -f "$MTP_PATH" ]]; then
         flags+=(--no-dspark)
         log "Starting ds4-server with MTP-2 speculation (continuous batching)."
     else
         flags+=(--no-spec)
-        log "Starting ds4-server (plain continuous decode; add --with-mtp or --with-dspark for speculation)."
+        if [[ "$MTP_SUPPORTED" -eq 0 ]] && [[ ! -f "$DSPARK_PATH" ]]; then
+            log "Starting ds4-server plain — no 0731 drafter on disk and the 0731 base has no MTP fallback."
+        else
+            log "Starting ds4-server (plain continuous decode; add --with-mtp or --with-dspark for speculation)."
+        fi
     fi
 
     DS4_SRC_DIR="$DS4_SRC_DIR" DS4_GGUF_DIR="$DS4_GGUF_DIR" \
@@ -379,9 +543,12 @@ start_server() {
 # ============================================================================
 
 verify_host
+upgrade_scan
+upgrade_preflight
 clone_and_build
 download_models
 smoke_test
+upgrade_cleanup_offer
 install_launcher
 start_server
 

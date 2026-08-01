@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 470" width="1200" height="470" role="img" aria-label="ds4 throughput overlay">
+<style>
+  .bg { fill: #ffffff; }
+  .title    { font: 600 17px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #1f2329; }
+  .subtitle { font: 12.5px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #566174; }
+  .panel-title { font: 600 14px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #1f2329; }
+  .axis-label  { font: 11px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #566174; }
+  .legend      { font: 12px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #1f2329; }
+  .callout     { font: 700 12px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #1f8a5a; }
+  .callout-bad { font: 700 12px -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif; fill: #c0392b; }
+  .grid { stroke: #eef0f3; stroke-width: 0.8; }
+  .axis { stroke: #c8ccd2; stroke-width: 1; }
+  .line-upstream { fill: none; stroke: #7a8497; stroke-width: 2; }
+  .line-fork     { fill: none; stroke: #2fa97a; stroke-width: 2.4; }
+  .dot-upstream  { fill: #7a8497; }
+  .dot-fork      { fill: #2fa97a; }
+  .gain { fill: #2fa97a; fill-opacity: 0.18; stroke: none; }
+  .loss { fill: #d64545; fill-opacity: 0.16; stroke: none; }
+  .stat-fork     { font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #2fa97a; }
+  .stat-upstream { font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #7a8497; }
+</style>
+<rect class="bg" x="0" y="0" width="1200" height="470"/>
+<text class="title" x="600" y="30" text-anchor="middle">DGX Spark (GB10) throughput: upstream antirez/ds4 main vs the fork at v0.5.0</text>
+<text class="subtitle" x="600" y="52" text-anchor="middle">V4 Flash 0731 IQ2XXS imatrix - ds4-bench ctx 2k-64k step 2k gen=128</text>
+<g transform="translate(300,66)">
+<line class="line-upstream" x1="0" y1="8" x2="32" y2="8"/>
+<text class="legend" x="40" y="12">upstream main (native sm_121 build)</text>
+<line class="line-fork" x1="300" y1="8" x2="332" y2="8"/>
+<text class="legend" x="340" y="12">fork v0.5.0</text>
+</g>
+<line class="grid" x1="78" y1="370.0" x2="595" y2="370.0"/>
+<text class="axis-label" x="70" y="373.0" text-anchor="end">0</text>
+<line class="grid" x1="78" y1="322.0" x2="595" y2="322.0"/>
+<text class="axis-label" x="70" y="325.0" text-anchor="end">300</text>
+<line class="grid" x1="78" y1="274.0" x2="595" y2="274.0"/>
+<text class="axis-label" x="70" y="277.0" text-anchor="end">600</text>
+<line class="grid" x1="78" y1="226.0" x2="595" y2="226.0"/>
+<text class="axis-label" x="70" y="229.0" text-anchor="end">900</text>
+<line class="grid" x1="78" y1="178.0" x2="595" y2="178.0"/>
+<text class="axis-label" x="70" y="181.0" text-anchor="end">1200</text>
+<line class="grid" x1="78" y1="130.0" x2="595" y2="130.0"/>
+<text class="axis-label" x="70" y="133.0" text-anchor="end">1500</text>
+<line class="grid" x1="78.0" y1="130" x2="78.0" y2="370"/>
+<text class="axis-label" x="78.0" y="386" text-anchor="middle">2k</text>
+<line class="grid" x1="211.4" y1="130" x2="211.4" y2="370"/>
+<text class="axis-label" x="211.4" y="386" text-anchor="middle">18k</text>
+<line class="grid" x1="344.8" y1="130" x2="344.8" y2="370"/>
+<text class="axis-label" x="344.8" y="386" text-anchor="middle">34k</text>
+<line class="grid" x1="461.6" y1="130" x2="461.6" y2="370"/>
+<text class="axis-label" x="461.6" y="386" text-anchor="middle">48k</text>
+<line class="grid" x1="595.0" y1="130" x2="595.0" y2="370"/>
+<text class="axis-label" x="595.0" y="386" text-anchor="middle">64k</text>
+<line class="axis" x1="78" y1="130" x2="78" y2="370"/>
+<line class="axis" x1="78" y1="370" x2="595" y2="370"/>
+<text class="axis-label" x="26" y="250.0" text-anchor="middle" transform="rotate(-90 26 250.0)">tok/s</text>
+<text class="axis-label" x="336" y="404" text-anchor="middle">context tokens</text>
+<text class="panel-title" x="336" y="118" text-anchor="middle">prefill</text>
+<polygon class="gain" points="78.0,211.6 94.7,202.6 111.4,204.2 128.0,205.7 144.7,207.2 161.4,208.3 178.1,208.7 194.7,207.8 211.4,208.0 228.1,208.0 244.8,208.8 261.5,209.3 278.1,209.8 294.8,210.7 311.5,211.1 328.2,211.0 344.8,212.5 361.5,212.0 378.2,212.7 394.9,212.8 411.5,213.9 428.2,214.3 444.9,214.6 461.6,214.9 478.3,215.1 494.9,215.4 511.6,216.1 528.3,216.7 545.0,217.6 561.6,217.2 578.3,218.0 595.0,218.2 595.0,324.7 578.3,324.5 561.6,324.1 545.0,323.9 528.3,323.6 511.6,323.2 494.9,323.0 478.3,322.8 461.6,322.0 444.9,321.6 428.2,321.3 411.5,320.9 394.9,320.5 378.2,320.1 361.5,319.8 344.8,319.4 328.2,317.8 311.5,317.4 294.8,317.1 278.1,316.6 261.5,316.2 244.8,315.7 228.1,315.3 211.4,314.9 194.7,314.5 178.1,314.3 161.4,313.7 144.7,313.3 128.0,312.6 111.4,312.0 94.7,311.3 78.0,307.1"/>
+<polyline class="line-upstream" points="78.0,307.1 94.7,311.3 111.4,312.0 128.0,312.6 144.7,313.3 161.4,313.7 178.1,314.3 194.7,314.5 211.4,314.9 228.1,315.3 244.8,315.7 261.5,316.2 278.1,316.6 294.8,317.1 311.5,317.4 328.2,317.8 344.8,319.4 361.5,319.8 378.2,320.1 394.9,320.5 411.5,320.9 428.2,321.3 444.9,321.6 461.6,322.0 478.3,322.8 494.9,323.0 511.6,323.2 528.3,323.6 545.0,323.9 561.6,324.1 578.3,324.5 595.0,324.7"/>
+<polyline class="line-fork" points="78.0,211.6 94.7,202.6 111.4,204.2 128.0,205.7 144.7,207.2 161.4,208.3 178.1,208.7 194.7,207.8 211.4,208.0 228.1,208.0 244.8,208.8 261.5,209.3 278.1,209.8 294.8,210.7 311.5,211.1 328.2,211.0 344.8,212.5 361.5,212.0 378.2,212.7 394.9,212.8 411.5,213.9 428.2,214.3 444.9,214.6 461.6,214.9 478.3,215.1 494.9,215.4 511.6,216.1 528.3,216.7 545.0,217.6 561.6,217.2 578.3,218.0 595.0,218.2"/>
+<circle class="dot-upstream" cx="78.0" cy="307.1" r="3"/>
+<circle class="dot-fork" cx="78.0" cy="211.6" r="3"/>
+<text class="callout" x="86.0" y="205.6" >2.52x @ 2k</text>
+<text class="callout" x="587.0" y="212.2" text-anchor="end">3.35x @ 64k</text>
+<text class="stat-fork" x="88" y="346.0">mean 989.3 · max 1,046.5</text>
+<text class="stat-upstream" x="88" y="361.0">mean 323.2 · max 393.1</text>
+<line class="grid" x1="655" y1="370.0" x2="1172" y2="370.0"/>
+<text class="axis-label" x="647" y="373.0" text-anchor="end">0</text>
+<line class="grid" x1="655" y1="322.0" x2="1172" y2="322.0"/>
+<text class="axis-label" x="647" y="325.0" text-anchor="end">5</text>
+<line class="grid" x1="655" y1="274.0" x2="1172" y2="274.0"/>
+<text class="axis-label" x="647" y="277.0" text-anchor="end">10</text>
+<line class="grid" x1="655" y1="226.0" x2="1172" y2="226.0"/>
+<text class="axis-label" x="647" y="229.0" text-anchor="end">15</text>
+<line class="grid" x1="655" y1="178.0" x2="1172" y2="178.0"/>
+<text class="axis-label" x="647" y="181.0" text-anchor="end">20</text>
+<line class="grid" x1="655" y1="130.0" x2="1172" y2="130.0"/>
+<text class="axis-label" x="647" y="133.0" text-anchor="end">25</text>
+<line class="grid" x1="655.0" y1="130" x2="655.0" y2="370"/>
+<text class="axis-label" x="655.0" y="386" text-anchor="middle">2k</text>
+<line class="grid" x1="788.4" y1="130" x2="788.4" y2="370"/>
+<text class="axis-label" x="788.4" y="386" text-anchor="middle">18k</text>
+<line class="grid" x1="921.8" y1="130" x2="921.8" y2="370"/>
+<text class="axis-label" x="921.8" y="386" text-anchor="middle">34k</text>
+<line class="grid" x1="1038.6" y1="130" x2="1038.6" y2="370"/>
+<text class="axis-label" x="1038.6" y="386" text-anchor="middle">48k</text>
+<line class="grid" x1="1172.0" y1="130" x2="1172.0" y2="370"/>
+<text class="axis-label" x="1172.0" y="386" text-anchor="middle">64k</text>
+<line class="axis" x1="655" y1="130" x2="655" y2="370"/>
+<line class="axis" x1="655" y1="370" x2="1172" y2="370"/>
+<text class="axis-label" x="603" y="250.0" text-anchor="middle" transform="rotate(-90 603 250.0)">tok/s</text>
+<text class="axis-label" x="914" y="404" text-anchor="middle">context tokens</text>
+<text class="panel-title" x="914" y="118" text-anchor="middle">generation</text>
+<polygon class="gain" points="655.0,152.5 671.7,175.7 688.4,177.8 705.0,178.9 721.7,179.8 738.4,180.5 755.1,181.0 771.7,181.9 788.4,182.9 805.1,183.3 821.8,184.2 838.5,184.9 855.1,185.6 871.8,186.4 888.5,186.7 905.2,187.6 921.8,188.4 938.5,188.8 955.2,189.4 971.9,189.8 988.5,190.5 1005.2,191.2 1021.9,192.0 1038.6,192.5 1055.3,193.1 1071.9,193.7 1088.6,194.6 1105.3,195.2 1122.0,195.7 1138.6,196.3 1155.3,196.9 1172.0,197.4 1172.0,243.0 1155.3,242.7 1138.6,242.3 1122.0,242.0 1105.3,241.6 1088.6,241.5 1071.9,241.2 1055.3,240.8 1038.6,240.5 1021.9,240.2 1005.2,239.9 988.5,239.5 971.9,239.2 955.2,239.1 938.5,238.7 921.8,238.4 905.2,237.9 888.5,234.6 871.8,234.4 855.1,234.2 838.5,233.7 821.8,233.3 805.1,233.0 788.4,232.7 771.7,232.3 755.1,232.9 738.4,232.6 721.7,232.1 705.0,231.4 688.4,230.1 671.7,229.3 655.0,206.3"/>
+<polyline class="line-upstream" points="655.0,206.3 671.7,229.3 688.4,230.1 705.0,231.4 721.7,232.1 738.4,232.6 755.1,232.9 771.7,232.3 788.4,232.7 805.1,233.0 821.8,233.3 838.5,233.7 855.1,234.2 871.8,234.4 888.5,234.6 905.2,237.9 921.8,238.4 938.5,238.7 955.2,239.1 971.9,239.2 988.5,239.5 1005.2,239.9 1021.9,240.2 1038.6,240.5 1055.3,240.8 1071.9,241.2 1088.6,241.5 1105.3,241.6 1122.0,242.0 1138.6,242.3 1155.3,242.7 1172.0,243.0"/>
+<polyline class="line-fork" points="655.0,152.5 671.7,175.7 688.4,177.8 705.0,178.9 721.7,179.8 738.4,180.5 755.1,181.0 771.7,181.9 788.4,182.9 805.1,183.3 821.8,184.2 838.5,184.9 855.1,185.6 871.8,186.4 888.5,186.7 905.2,187.6 921.8,188.4 938.5,188.8 955.2,189.4 971.9,189.8 988.5,190.5 1005.2,191.2 1021.9,192.0 1038.6,192.5 1055.3,193.1 1071.9,193.7 1088.6,194.6 1105.3,195.2 1122.0,195.7 1138.6,196.3 1155.3,196.9 1172.0,197.4"/>
+<circle class="dot-upstream" cx="655.0" cy="206.3" r="3"/>
+<circle class="dot-fork" cx="655.0" cy="152.5" r="3"/>
+<text class="callout" x="663.0" y="146.5" >+33% @ 2k</text>
+<text class="callout" x="1164.0" y="191.4" text-anchor="end">+36% @ 64k</text>
+<text class="stat-fork" x="665" y="346.0">mean 19.1 · max 22.7</text>
+<text class="stat-upstream" x="665" y="361.0">mean 14.0 · max 17.1</text>
+<text class="subtitle" x="600" y="454" text-anchor="middle">ds4-bench - GB10 - both lines on the 0731 gguf - 2026-08-01</text>
+</svg>
