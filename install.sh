@@ -36,24 +36,26 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-08-02): the Entrpi/ds4 fork release tag v0.5.1 —
-# the agentic-serving robustness fast-follow on the v0.5.0 deep
-# substrate release (0731 weights). Long-lived servers with disk KV get
-# their fixes: the demand-mapped KV pool releases evicted banks' pages
-# under budget pressure (the v0.5.0 known issue), disk-KV replay
-# survives cross-boot divergence (a truncated turn no longer strands
-# its record — 90 s cold re-prefill becomes a ~1 s partial restore),
-# deep conversations checkpoint at retire so a crash restores them
-# warm, and speculative support models are health-checked at the accept
-# counters. Perf identical to v0.5.0 (byte-exact serving twins):
-# 515K-token admit at 776 tok/s, ~960 tok/s prefill at 2k, served
-# aggregate 59 tok/s at 12 concurrent requests; 0731 quality unchanged
-# (MMLU 79.5, needles 70/70; DSpark-only speculation with the matching
-# re-extracted drafter). Standing release gates green on the tagged
-# binary. Set DS4_REF=main + DS4_REPO=antirez/ds4 for the upstream
-# engine without the fork's serving stack.
+# Pin (updated 2026-08-02): the Entrpi/ds4 fork release tag v0.5.2 —
+# the field-robustness follow-up on v0.5.1 (0731 weights). Deep-context
+# and interrupt-heavy deployments get their fixes: serial-path requests
+# on big -c servers are served instead of 500ing (the fallback session
+# right-sizes to the request; anthropic/responses endpoints and
+# admission-reject fallbacks all rode this path), a boot whose serving
+# shape cannot host armed speculation says so loudly instead of quietly
+# decoding at half speed (DS4_SERVER_COALESCE_MAX=1), and disconnected
+# clients stop costing GPU at every stage — a cancelled request is
+# dropped within one prefill chunk or one decode step instead of running
+# its full prompt ingest and token budget for nobody. Perf identical to
+# v0.5.1 and v0.5.0 (byte-exact serving twins): 515K-token admit at 776
+# tok/s, ~960 tok/s prefill at 2k, served aggregate 59 tok/s at 12
+# concurrent requests; 0731 quality unchanged (MMLU 79.5, needles
+# 70/70; DSpark-only speculation with the matching re-extracted
+# drafter). Standing release gates green on the tagged binary. Set
+# DS4_REF=main + DS4_REPO=antirez/ds4 for the upstream engine without
+# the fork's serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.5.1}"
+DS4_REF="${DS4_REF:-v0.5.2}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
