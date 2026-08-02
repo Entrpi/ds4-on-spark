@@ -548,3 +548,13 @@ docs/
 ## License
 
 MIT.
+
+## Update check
+
+Since v0.5.3, `ds4-server` checks for a newer release at most once per day:
+a plain GET of the one-line [`LATEST`](LATEST) file in this repository,
+shortly after the server starts listening. Nothing about your machine or
+usage is sent, the check never blocks or fails startup, and a newer
+version only prints an upgrade hint to the server log. Disable it with
+`--no-update-check` or `DS4_NO_UPDATE_CHECK=1`. Related flags:
+`ds4-server --version`, `--check-update`, `--upgrade`.
