@@ -36,26 +36,27 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-08-02): the Entrpi/ds4 fork release tag v0.5.2 —
-# the field-robustness follow-up on v0.5.1 (0731 weights). Deep-context
-# and interrupt-heavy deployments get their fixes: serial-path requests
-# on big -c servers are served instead of 500ing (the fallback session
-# right-sizes to the request; anthropic/responses endpoints and
-# admission-reject fallbacks all rode this path), a boot whose serving
-# shape cannot host armed speculation says so loudly instead of quietly
-# decoding at half speed (DS4_SERVER_COALESCE_MAX=1), and disconnected
-# clients stop costing GPU at every stage — a cancelled request is
-# dropped within one prefill chunk or one decode step instead of running
-# its full prompt ingest and token budget for nobody. Perf identical to
-# v0.5.1 and v0.5.0 (byte-exact serving twins): 515K-token admit at 776
-# tok/s, ~960 tok/s prefill at 2k, served aggregate 59 tok/s at 12
-# concurrent requests; 0731 quality unchanged (MMLU 79.5, needles
-# 70/70; DSpark-only speculation with the matching re-extracted
-# drafter). Standing release gates green on the tagged binary. Set
-# DS4_REF=main + DS4_REPO=antirez/ds4 for the upstream engine without
-# the fork's serving stack.
+# Pin (updated 2026-08-03): the Entrpi/ds4 fork release tag v0.5.4 —
+# the field-report release on v0.5.3 (0731 weights; every change traces
+# to a forum report). Reasoning effort now reaches the model on every
+# box (--reasoning-effort server default; explicit request values
+# honored at any --ctx), interrupted work leaves checkpoints instead of
+# cold banks (an aborted or timed-out request keeps its committed
+# prefix and a retry resumes there instead of re-prefilling), a failed
+# admission chunk aborts one job instead of the whole continuous batch,
+# a drafter failure disarms speculation instead of killing serving, an
+# operator memory floor (--mem-floor-gb, default 4 GiB) gates KV-cache
+# growth against live free memory, reset-style client disconnects are
+# caught at the liveness probe, and continuous-batch responses report
+# true cached_tokens. Perf identical to v0.5.3 (byte-exact serving
+# twins): 515K-token admit at 776 tok/s, ~960 tok/s prefill at 2k,
+# served aggregate 59 tok/s at 12 concurrent requests; 0731 quality
+# unchanged (official logprob vectors: five cases, zero exclusions).
+# Standing release gates green on the tagged binary. Set DS4_REF=main +
+# DS4_REPO=antirez/ds4 for the upstream engine without the fork's
+# serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.5.3}"
+DS4_REF="${DS4_REF:-v0.5.4}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
