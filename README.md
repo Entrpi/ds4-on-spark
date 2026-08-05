@@ -45,9 +45,21 @@ post-quench serving measured identical to plain (forced-quench identity
 ![Ship decode across context frontiers: plain vs DSpark with quench, two corpora, upstream reference](docs/v041_decode_overlay.svg)
 
 **Status:** Working end-to-end, pinned to the fork release
-[**`v0.5.0`**](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md) — the
-deep substrate release, shipped together with the
-**DeepSeek-V4-Flash-0731** weights refresh this installer now sets up.
+[**`v0.5.5`**](https://github.com/Entrpi/ds4/blob/v0.5.5/CHANGELOG.md) — five
+field-report releases of serving robustness on top of
+[`v0.5.0`](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md), the
+deep substrate release described below, shipped together with the
+**DeepSeek-V4-Flash-0731** weights refresh this installer sets up.
+Performance is unchanged across that span (serving twins byte-exact at
+each step), so the numbers and charts here still stand. What v0.5.1
+through v0.5.5 added is reliability under real agent load: the
+intermittent CUDA illegal-access crash is root-caused and fixed
+(v0.5.5), interrupted requests leave checkpoints so retries resume
+instead of re-ingesting, dead clients stop costing GPU, an operator
+memory floor gates cache growth against live free memory, reasoning
+effort reaches the model at every context size, tool-call budget cuts
+report `length` rather than `error`, and the server checks for updates
+once a day with `ds4-server --upgrade` to apply them.
 Engine side: the flat-pool arc is closed (every per-layer activation
 requantize retired, bit-exactly), CUDA-graph capture covers every
 context depth (a streaming top-512 selection tier replaced the old
@@ -80,7 +92,7 @@ stepwise math) predates v0.4.0's much faster plain baseline. Prefill runs
 v0.5.0 flat-pool work, measured against upstream main `54b36ed`
 2026-08-01). The Metal backend is unaffected.
 
-- **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine (CUDA backend landed 2026-05-11). **This repo pins the [`Entrpi/ds4`](https://github.com/Entrpi/ds4) fork at release [`v0.5.0`](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md)** (2026-08-01): the deep-decode substrate line — everything through v0.2's robust serving (continuous batching, crash fixes, tools/thinking speculation on the continuous path, deep-context capacity, FP8/FP4 packed compressed-KV as the default primaries, observability), v0.3's tensor-core batched scorer and durable pinned banks (deep conversations survive eviction and restarts), v0.4's head-group flash-decode for dense and indexed attention, aligned dense verify tiers, MoE gate_up expert dedup, speculation armed at every depth (quench governing, no kv-depth gate) plus a community-contributed reap of queued requests whose client disconnected, v0.4.1's quench recalibration (the break-even guard now tracks v0.4's measured verify cost), v0.4.2's community-contributed thinking-mode warm reuse, and v0.5.0's flat-pool arc + capture-at-every-depth + 0731 cutover (quench guard recalibrated to the new model identity; MTP retired with the 0731 checkpoint). The fork `CHANGELOG.md` documents every fork-side change.
+- **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine (CUDA backend landed 2026-05-11). **This repo pins the [`Entrpi/ds4`](https://github.com/Entrpi/ds4) fork at release [`v0.5.5`](https://github.com/Entrpi/ds4/blob/v0.5.5/CHANGELOG.md)** (2026-08-05): the deep-decode substrate line through `v0.5.0` (2026-08-01), plus five field-report robustness releases on top of it (v0.5.1-v0.5.5: crash fixes, interrupted-work checkpoints, disconnect handling, memory governance, agent-harness honesty; performance byte-exact across the span) — everything through v0.2's robust serving (continuous batching, crash fixes, tools/thinking speculation on the continuous path, deep-context capacity, FP8/FP4 packed compressed-KV as the default primaries, observability), v0.3's tensor-core batched scorer and durable pinned banks (deep conversations survive eviction and restarts), v0.4's head-group flash-decode for dense and indexed attention, aligned dense verify tiers, MoE gate_up expert dedup, speculation armed at every depth (quench governing, no kv-depth gate) plus a community-contributed reap of queued requests whose client disconnected, v0.4.1's quench recalibration (the break-even guard now tracks v0.4's measured verify cost), v0.4.2's community-contributed thinking-mode warm reuse, and v0.5.0's flat-pool arc + capture-at-every-depth + 0731 cutover (quench guard recalibrated to the new model identity; MTP retired with the 0731 checkpoint). The fork `CHANGELOG.md` documents every fork-side change.
 - **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf) — the **DeepSeek-V4-Flash-0731** ~81 GiB asymmetric quant: IQ2_XXS for routed-expert gate/up, Q2_K for routed-expert down (these dominate model bytes), Q8_0 for everything else dense (shared expert, attention projections, output head, router), F16 for LoRA matrices and the compressor/indexer, F32 norms. (FP8 in ds4 is a *runtime* KV-cache quantization — E4M3FN round-trip — not a stored weight format.) Plus the ~7 GiB DSpark drafter from [`bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF`](https://huggingface.co/bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF); the 0731 checkpoint has no MTP head, so there is no MTP gguf for it (the legacy MTP file pairs only with the legacy base).
 - **Hardware:** NVIDIA DGX Spark, GB10, SM121, 128 GB LPDDR5X unified (~119 GiB usable). The donor's `Makefile` has a `make cuda-spark` target that builds native `sm_121`, plus `make cuda CUDA_ARCH=sm_NNN` for an explicit override — both GB10-correct with no patches needed. (Building with an empty `-arch` measured ~25% slower prefill on GB10, so the explicit arch matters.)
 

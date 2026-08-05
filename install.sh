@@ -36,27 +36,33 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-08-03): the Entrpi/ds4 fork release tag v0.5.4 —
-# the field-report release on v0.5.3 (0731 weights; every change traces
-# to a forum report). Reasoning effort now reaches the model on every
-# box (--reasoning-effort server default; explicit request values
-# honored at any --ctx), interrupted work leaves checkpoints instead of
-# cold banks (an aborted or timed-out request keeps its committed
-# prefix and a retry resumes there instead of re-prefilling), a failed
-# admission chunk aborts one job instead of the whole continuous batch,
-# a drafter failure disarms speculation instead of killing serving, an
-# operator memory floor (--mem-floor-gb, default 4 GiB) gates KV-cache
-# growth against live free memory, reset-style client disconnects are
-# caught at the liveness probe, and continuous-batch responses report
-# true cached_tokens. Perf identical to v0.5.3 (byte-exact serving
-# twins): 515K-token admit at 776 tok/s, ~960 tok/s prefill at 2k,
-# served aggregate 59 tok/s at 12 concurrent requests; 0731 quality
-# unchanged (official logprob vectors: five cases, zero exclusions).
-# Standing release gates green on the tagged binary. Set DS4_REF=main +
-# DS4_REPO=antirez/ds4 for the upstream engine without the fork's
-# serving stack.
+# Pin (updated 2026-08-05): the Entrpi/ds4 fork release tag v0.5.5 —
+# the illegal-access release on v0.5.4 (0731 weights). The intermittent
+# CUDA "illegal memory access" crash that several boxes hit under
+# sustained agentic load is root-caused and fixed: the deep-context
+# top-512 selector decided to compact its candidate buffer from a
+# counter the next tile's appends could still move, so warps could
+# disagree, corrupt the block's sort state, and write outside shared
+# memory. The decision value is now frozen behind a barrier; selections
+# are unchanged token for token. On a deterministic reproducer, 16
+# interleaved fresh-boot runs per side: 5 crashes unfixed, 0 fixed.
+# Also: a max_tokens cut inside a tool call reports finish_reason
+# "length" instead of "error" and never decodes past the budget while
+# recovering, reuse picks are ranked by the tokens they actually
+# deliver, the KV-cache page budget comes from the bank plan instead of
+# a boot-time memory sample, DS4_SERIAL_RESERVE_CTX (off by default)
+# reserves memory for the single-request lane where that lane matters
+# more than batch depth, and a boot advisory names the faster
+# Spark-specific build when a generic CUDA build is detected. Perf
+# identical to v0.5.4 (byte-exact serving twins): 515K-token admit at
+# 776 tok/s, ~960 tok/s prefill at 2k, served aggregate 59 tok/s at 12
+# concurrent requests; 0731 quality unchanged (official logprob
+# vectors: five cases, zero exclusions). Standing release gates green
+# on the tagged binary, including the 240k deep-serving gate and the
+# tool-eval suite. Set DS4_REF=main + DS4_REPO=antirez/ds4 for the
+# upstream engine without the fork's serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.5.4}"
+DS4_REF="${DS4_REF:-v0.5.5}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
