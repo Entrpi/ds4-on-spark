@@ -9,7 +9,8 @@
 #   1. Verifies the host is a DGX Spark (or other GB10/SM121 system) with
 #      CUDA 13 toolkit installed and >= 120 GiB free disk for the GGUFs.
 #   2. Clones (or fast-forwards) the ds4 fork at the pinned tag into $DS4_SRC_DIR.
-#   3. Builds ds4, ds4-server, ds4-bench with CUDA_ARCH=sm_121.
+#   3. Builds ds4, ds4-server, ds4-bench with `make cuda-spark` (GB10 default).
+#      A non-GB10 Blackwell SKU builds with `make cuda CUDA_ARCH=<--cuda-arch>`.
 #   4. Downloads the 0731 Q2 quantized GGUF (~87 GiB) from
 #      antirez/deepseek-v4-gguf and the matching 0731 DSpark Q2K drafter
 #      (~7 GiB) into $DS4_GGUF_DIR. The 0731 base has NO MTP head (the
@@ -94,6 +95,7 @@ DS4_CTX="${DS4_CTX:-32768}"
 
 FORCE_HW=0
 SKIP_BUILD=0
+IS_GB10=0          # set by verify_host; selects the post-build arch check only
 SKIP_DOWNLOAD=0
 SKIP_MTP=0
 SKIP_SMOKE=0
@@ -217,12 +219,12 @@ verify_host() {
     fi
     log "GPU: $gpu_info"
 
-    if ! echo "$gpu_info" | grep -qE 'compute_cap.*12\.1|GB10|Spark'; then
-        if [[ "$FORCE_HW" -eq 0 ]]; then
-            warn "Not detecting GB10 / SM12.1. ds4 may still work on other Blackwell SKUs."
-            warn "Pass --cuda-arch sm_120 (or matching) and --force to proceed."
-            die "Host check failed. Pass --force to skip."
-        fi
+    if echo "$gpu_info" | grep -qE 'compute_cap.*12\.1|GB10|Spark'; then
+        IS_GB10=1
+    elif [[ "$FORCE_HW" -eq 0 ]]; then
+        warn "Not detecting GB10 / SM12.1. ds4 may still work on other Blackwell SKUs."
+        warn "Pass --cuda-arch sm_120 (or matching) and --force to proceed."
+        die "Host check failed. Pass --force to skip."
     fi
 
     # CUDA toolkit
@@ -281,19 +283,61 @@ clone_and_build() {
         )
     fi
 
-    log "Building ds4, ds4-server, ds4-bench (CUDA_ARCH=$CUDA_ARCH, -j$BUILD_JOBS) ..."
     # As of upstream commit be43477 ("Standardize context length errors", 2026-05-15)
     # the default `make` target prints help instead of building. The named targets
     # are `make cuda CUDA_ARCH=...`, `make cuda-spark`, `make cuda-generic`,
-    # `make cpu`. `make cuda-spark` now builds native sm_121 (fixed in ds4
-    # commit dd157bd — it previously left `-arch` empty, ~25% slower prefill on
-    # GB10). We still call `make cuda CUDA_ARCH=$CUDA_ARCH` here to preserve the
-    # user-facing `--cuda-arch sm_NNN` flag for non-GB10 Blackwell SKUs.
-    ( cd "$DS4_SRC_DIR" && make cuda -j"$BUILD_JOBS" CUDA_ARCH="$CUDA_ARCH" )
+    # `make cpu`.
+    #
+    # Target selection is driven by the RESOLVED CUDA_ARCH, never by the detected
+    # hardware, so `--cuda-arch` keeps deciding the build on every non-GB10 SKU:
+    #
+    #   sm_121 / sm_121a  -> make cuda-spark   (GB10; also the default arch)
+    #   anything else     -> make cuda CUDA_ARCH=$CUDA_ARCH   (unchanged path,
+    #                        e.g. RTX PRO 6000 Blackwell via --cuda-arch sm_120)
+    #
+    # Field report (forum 378855 post 65, sword_fish): every install before this
+    # ran `make cuda CUDA_ARCH=sm_121`, which sets the sm_121a gencode pair and
+    # DS4_CUDA_HAVE_MXF4 but NOT -DDS4_CUDA_SPARK_HBM_CACHE=1 — so the Spark HBM
+    # weight cache was compiled out of every GB10 install this script has ever
+    # produced. `make cuda-spark` hardcodes CUDA_ARCH=sm_121 itself and adds that
+    # define to both CFLAGS and NVCC_EXTRA_FLAGS, so we must not pass CUDA_ARCH
+    # to it. It also builds -B (the compile config changed; a partial rebuild
+    # would silently mix objects).
+    case "$CUDA_ARCH" in
+        sm_121|sm_121a)
+            log "Building ds4 for DGX Spark: make cuda-spark (CUDA_ARCH=sm_121 + HBM weight cache, -j$BUILD_JOBS) ..."
+            ( cd "$DS4_SRC_DIR" && make cuda-spark -j"$BUILD_JOBS" )
+            ;;
+        *)
+            log "Building ds4, ds4-server, ds4-bench (CUDA_ARCH=$CUDA_ARCH, -j$BUILD_JOBS) ..."
+            if [[ "$IS_GB10" -eq 1 ]]; then
+                warn "This host is a GB10 but --cuda-arch $CUDA_ARCH was requested, so the generic"
+                warn "build is used and the Spark fast paths are compiled out. Drop --cuda-arch (or"
+                warn "pass --cuda-arch sm_121) for the fast build."
+            fi
+            ( cd "$DS4_SRC_DIR" && make cuda -j"$BUILD_JOBS" CUDA_ARCH="$CUDA_ARCH" )
+            ;;
+    esac
 
     for bin in ds4 ds4-server ds4-bench; do
         [[ -x "$DS4_SRC_DIR/$bin" ]] || die "Build did not produce $bin"
     done
+
+    # sword_fish's second suggestion: prove the binary matches the hardware
+    # instead of trusting the make target. Non-fatal — a missing/!=0 cuobjdump
+    # must never fail an otherwise good install.
+    if [[ "$IS_GB10" -eq 1 ]]; then
+        local cuobjdump="/usr/local/cuda/bin/cuobjdump"
+        [[ -x "$cuobjdump" ]] || cuobjdump=$(command -v cuobjdump 2>/dev/null || true)
+        if [[ -n "$cuobjdump" ]] && [[ -x "$cuobjdump" ]]; then
+            if "$cuobjdump" "$DS4_SRC_DIR/ds4-server" 2>/dev/null | grep -q 'sm_121a'; then
+                ok "Verified: ds4-server carries sm_121a SASS."
+            else
+                warn "ds4-server does NOT carry sm_121a SASS. Expect a boot warning and reduced speed."
+            fi
+        fi
+    fi
+
     ok "Built: $DS4_SRC_DIR/{ds4,ds4-server,ds4-bench}"
 }
 
@@ -541,6 +585,26 @@ start_server() {
         if curl -sf "http://127.0.0.1:$DS4_PORT/v1/models" >/dev/null 2>&1; then
             ok "Server up on http://127.0.0.1:$DS4_PORT"
             curl -s "http://127.0.0.1:$DS4_PORT/v1/models" | python3 -m json.tool 2>/dev/null || true
+            # Field report 378855/65 (sword_fish): the server can be up, answer
+            # correctly, and still be a build that serves at a fraction of the
+            # advertised speed. The serving binary is the only thing that can
+            # see its own compile config, and since ds4 v0.5.5 it says so at
+            # boot. Surface that verdict in the install output — a cuobjdump
+            # arch check CANNOT catch this (both configs carry sm_121a SASS).
+            # Match the v0.5.5 advisory wording AND the split v0.5.6+ wordings
+            # (generic build / HBM-cache-only) — see ds4_server.c around the
+            # ds4_cuda_spark_build_mismatch call.
+            if grep -qE 'built without the DGX Spark configuration|binary is a generic CUDA build|Spark HBM weight cache is compiled out' "$HOME/ds4-server.log" 2>/dev/null; then
+                warn "==================================================================="
+                warn "ds4-server reports it was built WITHOUT the DGX Spark configuration"
+                warn "and will serve well below the advertised speed on this GB10."
+                warn "This is an installer/build defect, not a hardware problem. Fix:"
+                warn "    cd $DS4_SRC_DIR && make cuda-spark -j$BUILD_JOBS"
+                warn "then restart with: ds4-serve"
+                warn "==================================================================="
+            elif [[ "$IS_GB10" -eq 1 ]]; then
+                ok "Verified: no build-mismatch advisory in the boot log (DGX Spark fast paths active)."
+            fi
             return
         fi
         sleep 2
