@@ -37,33 +37,37 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-08-05): the Entrpi/ds4 fork release tag v0.5.5 —
-# the illegal-access release on v0.5.4 (0731 weights). The intermittent
-# CUDA "illegal memory access" crash that several boxes hit under
-# sustained agentic load is root-caused and fixed: the deep-context
-# top-512 selector decided to compact its candidate buffer from a
-# counter the next tile's appends could still move, so warps could
-# disagree, corrupt the block's sort state, and write outside shared
-# memory. The decision value is now frozen behind a barrier; selections
-# are unchanged token for token. On a deterministic reproducer, 16
-# interleaved fresh-boot runs per side: 5 crashes unfixed, 0 fixed.
-# Also: a max_tokens cut inside a tool call reports finish_reason
-# "length" instead of "error" and never decodes past the budget while
-# recovering, reuse picks are ranked by the tokens they actually
-# deliver, the KV-cache page budget comes from the bank plan instead of
-# a boot-time memory sample, DS4_SERIAL_RESERVE_CTX (off by default)
-# reserves memory for the single-request lane where that lane matters
-# more than batch depth, and a boot advisory names the faster
-# Spark-specific build when a generic CUDA build is detected. Perf
-# identical to v0.5.4 (byte-exact serving twins): 515K-token admit at
-# 776 tok/s, ~960 tok/s prefill at 2k, served aggregate 59 tok/s at 12
-# concurrent requests; 0731 quality unchanged (official logprob
-# vectors: five cases, zero exclusions). Standing release gates green
-# on the tagged binary, including the 240k deep-serving gate and the
-# tool-eval suite. Set DS4_REF=main + DS4_REPO=antirez/ds4 for the
-# upstream engine without the fork's serving stack.
+# Pin (updated 2026-08-08): the Entrpi/ds4 fork release tag v0.5.6 —
+# the first-class API release on v0.5.5 (0731 weights, unchanged). The
+# Anthropic Messages API and the OpenAI Responses API are now
+# first-class surfaces of the batched engine: buffered and streaming
+# requests on all four APIs run in the continuous batch, including
+# thinking, stop sequences, and streaming tool calls, with streams
+# starting at admission so first bytes arrive during prefill.
+# Tool-calling agents get a real continuation contract: a finished
+# tool call publishes a record binding it to the engine state that
+# produced it, the tool-result follow-up continues from that state in
+# place instead of re-ingesting the conversation, and stale state
+# answers a clean 409 (resend full history, which always works).
+# Also: stop-sequence hits report the matched text, max_tokens 0 means
+# zero on every lane, server errors use each API's native shape with
+# Retry-After where a retry makes sense, usage always matches timings
+# (cache read/write detail included), and explicit admission bounds
+# refuse honestly instead of queueing without limit. The new batched
+# routing is the default; setting DS4_SERVER_CONT_ANTHROPIC=0,
+# DS4_SERVER_CONT_RESPONSES=0, DS4_SERVER_CONT_TOOLS_ANTHROPIC=0 or
+# DS4_SERVER_CONT_TOOLS_RESPONSES=0 restores the old serial routing
+# per surface for one release only. Perf at parity with v0.5.5 (ABBA
+# within noise at N=1/8/16; serving semantics pinned by unit oracles):
+# the standing records and charts stand. Full release battery green on
+# the tagged tree, including the 240k deep-serving gate (now run at
+# shipped defaults, no tuned environment), the tool-eval suite
+# (83/100/86/84, byte-identical to v0.5.5), and cross-box golden
+# logprob vectors at zero deviation. Set DS4_REF=main +
+# DS4_REPO=antirez/ds4 for the upstream engine without the fork's
+# serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.5.5}"
+DS4_REF="${DS4_REF:-v0.5.6}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
@@ -295,17 +299,20 @@ clone_and_build() {
     #   anything else     -> make cuda CUDA_ARCH=$CUDA_ARCH   (unchanged path,
     #                        e.g. RTX PRO 6000 Blackwell via --cuda-arch sm_120)
     #
-    # Field report (forum 378855 post 65, sword_fish): every install before this
-    # ran `make cuda CUDA_ARCH=sm_121`, which sets the sm_121a gencode pair and
-    # DS4_CUDA_HAVE_MXF4 but NOT -DDS4_CUDA_SPARK_HBM_CACHE=1 — so the Spark HBM
-    # weight cache was compiled out of every GB10 install this script has ever
-    # produced. `make cuda-spark` hardcodes CUDA_ARCH=sm_121 itself and adds that
-    # define to both CFLAGS and NVCC_EXTRA_FLAGS, so we must not pass CUDA_ARCH
-    # to it. It also builds -B (the compile config changed; a partial rebuild
-    # would silently mix objects).
+    # Field report (forum 378855 post 65, sword_fish): every install before the
+    # v0.5.5 pin ran `make cuda CUDA_ARCH=sm_121`, which sets the sm_121a
+    # gencode pair and DS4_CUDA_HAVE_MXF4 but not the Spark-specific defines, so
+    # GB10 installs missed the Spark build entirely. `make cuda-spark` hardcodes
+    # CUDA_ARCH=sm_121 itself, so we must not pass CUDA_ARCH to it, and it
+    # builds -B (a partial rebuild across a compile-config change would silently
+    # mix objects). Note for v0.5.6+: upstream measurement showed the old HBM
+    # weight-read cache define changed memory planning, not kernel speed, and
+    # its startup memory charge could starve deep boots — the cuda-spark target
+    # no longer sets it, and the target remains the single source of truth for
+    # what a Spark build enables.
     case "$CUDA_ARCH" in
         sm_121|sm_121a)
-            log "Building ds4 for DGX Spark: make cuda-spark (CUDA_ARCH=sm_121 + HBM weight cache, -j$BUILD_JOBS) ..."
+            log "Building ds4 for DGX Spark: make cuda-spark (Spark fast paths, -j$BUILD_JOBS) ..."
             ( cd "$DS4_SRC_DIR" && make cuda-spark -j"$BUILD_JOBS" )
             ;;
         *)
