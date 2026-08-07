@@ -333,14 +333,25 @@ clone_and_build() {
     # sword_fish's second suggestion: prove the binary matches the hardware
     # instead of trusting the make target. Non-fatal — a missing/!=0 cuobjdump
     # must never fail an otherwise good install.
+    #
+    # v0.5.6: the check is capture-based, never `| grep -q`. Under pipefail,
+    # grep -q exits at the first match and cuobjdump dies of SIGPIPE (141), so
+    # the old pipeline reported "no sm_121a SASS" precisely when the match WAS
+    # found early in the dump — a false warning on every good fast build. An
+    # EMPTY capture is also distinguished from a real mismatch: silence must
+    # never verify anything.
     if [[ "$IS_GB10" -eq 1 ]]; then
         local cuobjdump="/usr/local/cuda/bin/cuobjdump"
         [[ -x "$cuobjdump" ]] || cuobjdump=$(command -v cuobjdump 2>/dev/null || true)
         if [[ -n "$cuobjdump" ]] && [[ -x "$cuobjdump" ]]; then
-            if "$cuobjdump" "$DS4_SRC_DIR/ds4-server" 2>/dev/null | grep -q 'sm_121a'; then
+            local sass_arches
+            sass_arches=$("$cuobjdump" "$DS4_SRC_DIR/ds4-server" 2>/dev/null | grep 'arch = ' || true)
+            if [[ "$sass_arches" == *sm_121a* ]]; then
                 ok "Verified: ds4-server carries sm_121a SASS."
+            elif [[ -z "$sass_arches" ]]; then
+                warn "could not read SASS arches from ds4-server (cuobjdump gave no output) — skipping the arch check."
             else
-                warn "ds4-server does NOT carry sm_121a SASS. Expect a boot warning and reduced speed."
+                warn "ds4-server does NOT carry sm_121a SASS (found: $(echo "$sass_arches" | tr '\n' ' ')). Expect a boot warning and reduced speed."
             fi
         fi
     fi
@@ -517,7 +528,7 @@ smoke_test() {
         log "Skipping smoke test (--no-smoke)."
         return
     fi
-    [[ -f "$GGUF_PATH" ]] || { warn "$GGUF_PATH missing — skipping smoke test."; return; }
+    [[ -f "$GGUF_PATH" ]] || { warn "$GGUF_PATH missing — skipping smoke test."; return 0; }
 
     log "Smoke test: 'capital of France' prompt ..."
     local out
@@ -542,7 +553,7 @@ install_launcher() {
         # curl|bash install: fetch the launcher from the repo at the same ref.
         mkdir -p "$HOME/.local/bin"
         curl -fsSL "https://raw.githubusercontent.com/Entrpi/ds4-on-spark/main/bin/ds4-serve" -o "$dst" \
-            || { warn "could not install ds4-serve launcher (offline?); full command is in the README."; return; }
+            || { warn "could not install ds4-serve launcher (offline?); full command is in the README."; return 0; }
     else
         mkdir -p "$HOME/.local/bin"
         cp "$src" "$dst"
@@ -560,7 +571,10 @@ install_launcher() {
 # ============================================================================
 
 start_server() {
-    [[ "$START_SERVER" -eq 1 ]] || return
+    # `|| return` (no argument) propagates the FAILED test's status 1, and
+    # under set -e that killed every non---start install at the last step —
+    # the script exited 1 after doing everything right. Explicit 0.
+    [[ "$START_SERVER" -eq 1 ]] || return 0
     [[ -f "$GGUF_PATH" ]] || die "$GGUF_PATH missing — cannot start server."
 
     local flags=()
