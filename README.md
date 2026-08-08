@@ -144,10 +144,11 @@ That one command:
    has no MTP head.
 5. Runs the "capital of France" smoke test and asserts "Paris" in the output.
 6. Installs the **`ds4-serve`** launcher to `~/.local/bin`.
-7. Starts `ds4-server` on `:8000` with `-c 32768` serving the **full DSpark
-   speculative stack** — lossless, quench-governed, armed at every depth
-   (v0.5.0 defaults; the break-even guard is calibrated to the 0731 model
-   identity).
+7. Starts `ds4-server` on `:8000` with `-c 262144` (256K — covers a full
+   Claude Code / agent-harness window with slack; the model is 1M-native)
+   serving the **full DSpark speculative stack** — lossless,
+   quench-governed, armed at every depth (v0.5.0 defaults; the break-even
+   guard is calibrated to the 0731 model identity).
 
 `--no-dspark` serves plain continuous decode instead (skips the drafter
 download). On 0731 the fallback ladder is DSpark → plain; `--with-mtp`
@@ -160,9 +161,9 @@ The full-stack launch is one command; every optimization is default-on and
 you only pass what you want to change:
 
 ```bash
-ds4-serve                              # full stack, ctx 32768, 127.0.0.1:8000
-ds4-serve -c 69632                     # more context (multi-agent harnesses)
-ds4-serve -c 69632 --host 0.0.0.0      # reachable from other machines
+ds4-serve                              # full stack, ctx 262144, 127.0.0.1:8000
+ds4-serve -c 524288                    # deepest tested context (512K)
+ds4-serve -c 32768 --host 0.0.0.0      # lighter footprint, reachable from LAN
 ```
 
 Anything you pass goes straight to `ds4-server` and overrides the defaults
