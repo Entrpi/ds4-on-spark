@@ -37,7 +37,15 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-08-08): the Entrpi/ds4 fork release tag v0.5.6 —
+# Pin (updated 2026-08-09): the Entrpi/ds4 fork release tag v0.5.6.1 —
+# fast-follow on v0.5.6: after a tool turn, the serial session's
+# continuation reservation now sheds competing work only for a short
+# seat window (DS4_CONT_HOLD_SHED_S, default 5 s, with an honest
+# Retry-After) instead of a full 60 s hold that could kill a long
+# agent session after one dropped stream; a late continuation falls
+# back to the documented 409-and-replay contract. Also ships the Metal
+# DSpark drafter end-to-end (community contribution, robotnursenyc).
+# The v0.5.6 base underneath:
 # the first-class API release on v0.5.5 (0731 weights, unchanged). The
 # Anthropic Messages API and the OpenAI Responses API are now
 # first-class surfaces of the batched engine: buffered and streaming
@@ -67,7 +75,7 @@ set -euo pipefail
 # DS4_REPO=antirez/ds4 for the upstream engine without the fork's
 # serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.5.6}"
+DS4_REF="${DS4_REF:-v0.5.6.1}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
