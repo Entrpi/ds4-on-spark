@@ -34,6 +34,15 @@ MTP="$DS4_GGUF_DIR/$MTP_FILE"
 DRAFTER="$DS4_GGUF_DIR/$DSPARK_FILE"
 BIN="$DS4_SRC_DIR/ds4-server"
 
+# ds4 v0.5.6.2+: serve the Codex model catalog from /v1/models so OpenAI
+# Codex self-configures (context window, auto-compaction, instructions)
+# with nothing but a provider block. The installer drops the file; unset
+# or delete it to serve the plain OpenAI list.
+CODEX_CATALOG="${DS4_CODEX_MODELS_FILE:-$HOME/.config/ds4/codex-models.json}"
+if [[ -f "$CODEX_CATALOG" ]]; then
+    export DS4_CODEX_MODELS_FILE="$CODEX_CATALOG"
+fi
+
 mode=dspark
 args=()
 for a in "$@"; do

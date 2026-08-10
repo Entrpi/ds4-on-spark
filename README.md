@@ -179,58 +179,44 @@ install layout a bare `ds4-server -c 49152 --host 0.0.0.0` boots the full
 stack too (one boot line reports what was auto-enabled). `ds4-serve` remains
 a thin convenience over it.
 
-### Pointing OpenAI Codex at the box (context window + auto-compaction)
+### Pointing OpenAI Codex at the box
 
-Codex does not learn a custom provider's context window on its own (its
-`model_context_window` override is broken upstream, openai/codex #16068 /
-#19185, and its fallback metadata assumes 272K), so long Codex sessions
-never auto-compact and eventually hit the server's honest capacity
-refusal. The workaround is a model catalog file —
-[`codex/ds4-codex-catalog.json`](codex/ds4-codex-catalog.json) in this
-repo declares the model at the shipped 256K window with auto-compaction
-enabled. The file also carries Codex's own default agent instructions
-(captured verbatim from codex-cli 0.144.1, an Apache-2.0 open source
-project — Codex replaces its system prompt with the catalog's
-`base_instructions`, and an empty string measurably lobotomizes the
-agent), and declares no reasoning levels: with reasoning on, Codex
-shows nothing while the model thinks, its ~300 s idle timer kills the
-stream mid-thought, and DeepSeek's long thinking blocks make
-compaction fire constantly. Edit `supported_reasoning_levels` back in
-only if you know you want that trade.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Entrpi/ds4-on-spark/main/codex/ds4-codex-catalog.json -o ~/.codex/ds4-codex-catalog.json
-```
+With ds4 v0.5.6.2+ and this repo's installer, Codex self-configures:
+the installer drops a model catalog at `~/.config/ds4/codex-models.json`
+and `ds4-serve` serves it from `/v1/models` in the schema Codex expects
+(real 256K context window, working auto-compaction, Codex's own agent
+instructions). All Codex needs is the provider block:
 
 ```toml
 # ~/.codex/config.toml
 model = "deepseek-v4-flash"
 model_provider = "ds4"
-model_catalog_json = "~/.codex/ds4-codex-catalog.json"
 
 [model_providers.ds4]
 name = "ds4"
 base_url = "http://YOUR_SPARK:8000/v1"
 wire_api = "responses"
-stream_idle_timeout_ms = 1200000
 ```
 
-(`stream_idle_timeout_ms` raises Codex's ~300 s stream-silence limit,
-which slow deep-context turns can otherwise trip.) If you boot a
-different `-c`, edit `context_window` (and the
-`auto_compact_token_limit`, which should sit comfortably below it) to
-match.
+If you boot a different `-c`, edit `context_window` (and
+`auto_compact_token_limit`, which should sit comfortably below it) in
+`~/.config/ds4/codex-models.json` to match — the server warns at boot
+on a mismatch. Booting ds4-server directly instead of via ds4-serve:
+`export DS4_CODEX_MODELS_FILE=~/.config/ds4/codex-models.json`. On
+older servers (or without the served catalog) the same file works
+client-side via `model_catalog_json = "~/.codex/ds4-codex-catalog.json"`
+after downloading [`codex/ds4-codex-catalog.json`](codex/ds4-codex-catalog.json).
 
-Honest caveat, from live validation: this makes Codex's compaction
-fire instead of the session dying at the capacity wall, and the server
-survives the compacted successor cleanly — but what survives a
-compaction depends on the transcript summary the model itself writes,
-and DeepSeek can leak DSML tool-call markup into those summaries,
-which confuses later turns. A server-side fix is chartered for ds4
-v0.5.7, along with serving `/v1/models` in Codex's schema so this
-file becomes unnecessary. For long agent sessions today, Claude Code
-is the recommended harness; its compaction works against the
-Anthropic surface out of the box.
+Background, for the curious: the catalog carries Codex's default agent
+instructions verbatim (captured from codex-cli 0.144.1, an Apache-2.0
+open source project — an empty `base_instructions` measurably
+lobotomizes the agent) and declares no reasoning levels (DeepSeek's
+long thinking blocks make Codex compaction thrash). ds4 v0.5.6.2 fixed
+the two server-side failure modes found while validating this:
+tool-call markup leaking into compaction summaries, and silent
+thinking turns tripping Codex's ~300 s idle timer. Claude Code needs
+none of this; its compaction works against the Anthropic surface out
+of the box.
 
 To preview without running:
 

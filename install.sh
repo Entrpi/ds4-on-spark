@@ -37,14 +37,19 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-08-09): the Entrpi/ds4 fork release tag v0.5.6.1 —
-# fast-follow on v0.5.6: after a tool turn, the serial session's
-# continuation reservation now sheds competing work only for a short
-# seat window (DS4_CONT_HOLD_SHED_S, default 5 s, with an honest
-# Retry-After) instead of a full 60 s hold that could kill a long
-# agent session after one dropped stream; a late continuation falls
-# back to the documented 409-and-replay contract. Also ships the Metal
-# DSpark drafter end-to-end (community contribution, robotnursenyc).
+# Pin (updated 2026-08-10): the Entrpi/ds4 fork release tag v0.5.6.2 —
+# the proper Codex fix, closing the v0.5.6.1 codex caveats server
+# side: tool-call syntax is terminal on no-tools requests (compaction
+# summaries can no longer be poisoned by leaked DSML markup),
+# GET /v1/models serves the codex model catalog when
+# DS4_CODEX_MODELS_FILE points at one (this installer drops it to
+# ~/.config/ds4/codex-models.json and ds4-serve exports the variable
+# automatically — codex self-configures with nothing but a provider
+# block), and silent decode heartbeats on every surface with a real
+# response.in_progress event on Responses (codex's idle timer counts
+# parsed SSE events, not bytes). The v0.5.6.1 base underneath adds
+# the continuation seat-shed window (DS4_CONT_HOLD_SHED_S, default
+# 5 s) and the community Metal DSpark drafter (robotnursenyc).
 # The v0.5.6 base underneath:
 # the first-class API release on v0.5.5 (0731 weights, unchanged). The
 # Anthropic Messages API and the OpenAI Responses API are now
@@ -75,7 +80,7 @@ set -euo pipefail
 # DS4_REPO=antirez/ds4 for the upstream engine without the fork's
 # serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.5.6.1}"
+DS4_REF="${DS4_REF:-v0.5.6.2}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
@@ -568,6 +573,19 @@ install_launcher() {
     fi
     chmod +x "$dst"
     ok "Installed ds4-serve to $dst (full stack by default; just pass -c/--host/--port)."
+    # ds4 v0.5.6.2+: the Codex model catalog, served from /v1/models by
+    # ds4-serve (DS4_CODEX_MODELS_FILE) so Codex self-configures. Best-effort.
+    local cat_src cat_dst="$HOME/.config/ds4/codex-models.json"
+    cat_src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/codex/ds4-codex-catalog.json"
+    mkdir -p "$HOME/.config/ds4"
+    if [[ -f "$cat_src" ]]; then
+        cp "$cat_src" "$cat_dst"
+        ok "Installed Codex model catalog to $cat_dst (served via /v1/models)."
+    elif curl -fsSL "https://raw.githubusercontent.com/Entrpi/ds4-on-spark/main/codex/ds4-codex-catalog.json" -o "$cat_dst"; then
+        ok "Installed Codex model catalog to $cat_dst (served via /v1/models)."
+    else
+        warn "could not fetch the Codex model catalog; /v1/models stays plain OpenAI (see README)."
+    fi
     case ":$PATH:" in
         *":$HOME/.local/bin:"*) ;;
         *) warn "$HOME/.local/bin is not on PATH — add it to use 'ds4-serve' directly." ;;
