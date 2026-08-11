@@ -37,7 +37,18 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-08-10): the Entrpi/ds4 fork release tag v0.5.6.2 —
+# Pin (updated 2026-08-11): the Entrpi/ds4 fork release tag v0.5.6.3 —
+# memory-footprint fix for long-running serving on memory-tight boxes
+# (forum 378855 post 86): the KV-cache growth budget is re-tethered
+# to measured capacity at boot (since v0.5.5 it was the bank plan's
+# own allowance regardless of what the box could afford, so
+# demand-mapped cache pages drained system memory under sustained
+# sequential load, to OOM on a memory-tight single Spark). The boot
+# ledger now prints budget=[chosen] [plan X, capacity Y];
+# DS4_MEM_FLOOR_GB stays the operator admission floor and
+# DS4_CUDA_NO_HBM_CACHE=1 opts out of the ~8.2 GiB startup weight
+# span cache while keeping the plan honest.
+# The v0.5.6.2 base underneath —
 # the proper Codex fix, closing the v0.5.6.1 codex caveats server
 # side: tool-call syntax is terminal on no-tools requests (compaction
 # summaries can no longer be poisoned by leaked DSML markup),
@@ -80,7 +91,7 @@ set -euo pipefail
 # DS4_REPO=antirez/ds4 for the upstream engine without the fork's
 # serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.5.6.2}"
+DS4_REF="${DS4_REF:-v0.5.6.3}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
