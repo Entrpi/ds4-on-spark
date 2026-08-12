@@ -8,7 +8,14 @@ set -euo pipefail
 
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
-GGUF_FILE="${GGUF_FILE:-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf}"
+# Default to the 0731 checkpoint, falling back to the previous-generation
+# file when only that one is installed (generation is detected from the
+# file name, matching install.sh — a GGUF_FILE override wins either way).
+LEGACY_GGUF_FILE="DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf"
+GGUF_FILE="${GGUF_FILE:-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf}"
+if [[ ! -f "$DS4_GGUF_DIR/$GGUF_FILE" && -f "$DS4_GGUF_DIR/$LEGACY_GGUF_FILE" ]]; then
+    GGUF_FILE="$LEGACY_GGUF_FILE"
+fi
 GGUF_PATH="${GGUF_PATH:-$DS4_GGUF_DIR/$GGUF_FILE}"
 MTP_FILE="${MTP_FILE:-DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf}"
 MTP_PATH="${MTP_PATH:-$DS4_GGUF_DIR/$MTP_FILE}"
@@ -41,6 +48,11 @@ fi
 
 mtp_args=()
 if [[ "$USE_MTP" -eq 1 ]]; then
+    if [[ "$GGUF_FILE" == *-0731* ]]; then
+        echo "--with-mtp: the 0731 checkpoint has no MTP head (replaced by the" >&2
+        echo "DSpark stages); drop --with-mtp, or set GGUF_FILE to the pre-0731 base." >&2
+        exit 2
+    fi
     [[ -f "$MTP_PATH" ]] || { echo "MTP GGUF not at $MTP_PATH" >&2; exit 1; }
     mtp_args=(--mtp "$MTP_PATH" --mtp-draft "$DRAFT")
     echo "NOTE: MTP enabled. Our benchmarks show ~3-6% regression on Spark"
