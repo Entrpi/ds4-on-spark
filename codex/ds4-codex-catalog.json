@@ -43,9 +43,9 @@
       "supports_search_tool": false,
       "experimental_supported_tools": [],
       "effective_context_window_percent": 95,
-      "context_window": 262144,
-      "max_context_window": 262144,
-      "auto_compact_token_limit": 220000,
+      "context_window": 524288,
+      "max_context_window": 524288,
+      "auto_compact_token_limit": 440000,
       "comp_hash": "0"
     }
   ]

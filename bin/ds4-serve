@@ -4,9 +4,9 @@
 # Installed to ~/.local/bin by ds4-on-spark's install.sh. Every optimization
 # is on by default; you only pass what you want to change:
 #
-#   ds4-serve                        # full stack, ctx 262144, 127.0.0.1:8000
-#   ds4-serve -c 69632               # bigger context
-#   ds4-serve -c 69632 --host 0.0.0.0 --port 8080
+#   ds4-serve                        # full stack, ctx 524288, 127.0.0.1:8000
+#   ds4-serve -c 786432              # deepest tested context (768K)
+#   ds4-serve -c 32768 --host 0.0.0.0 --port 8080
 #
 # Anything you pass goes straight to ds4-server and overrides the defaults
 # (see ds4-server --help). Two downgrade flags are handled here AND forwarded
@@ -94,5 +94,5 @@ esac
 # takes the last occurrence of a flag).
 exec env ${spec_env[@]+"${spec_env[@]}"} "$BIN" --cuda \
     -m "$BASE" ${mtp_args[@]+"${mtp_args[@]}"} \
-    -c 262144 --port 8000 \
+    -c 524288 --port 8000 \
     ${args[@]+"${args[@]}"}

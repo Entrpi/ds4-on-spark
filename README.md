@@ -145,8 +145,9 @@ That one command:
    has no MTP head.
 5. Runs the "capital of France" smoke test and asserts "Paris" in the output.
 6. Installs the **`ds4-serve`** launcher to `~/.local/bin`.
-7. Starts `ds4-server` on `:8000` with `-c 262144` (256K — covers a full
-   Claude Code / agent-harness window with slack; the model is 1M-native)
+7. Starts `ds4-server` on `:8000` with `-c 524288` (512K — room for deep
+   document ingestion alongside full agent-harness windows; the model is
+   1M-native, and since v0.6 unused context is demand-mapped, not hoarded)
    serving the **full DSpark speculative stack** — lossless,
    quench-governed, armed at every depth (v0.5.0 defaults; the break-even
    guard is calibrated to the 0731 model identity).
@@ -162,8 +163,8 @@ The full-stack launch is one command; every optimization is default-on and
 you only pass what you want to change:
 
 ```bash
-ds4-serve                              # full stack, ctx 262144, 127.0.0.1:8000
-ds4-serve -c 524288                    # deepest tested context (512K)
+ds4-serve                              # full stack, ctx 524288, 127.0.0.1:8000
+ds4-serve -c 786432                    # deepest tested context (768K)
 ds4-serve -c 32768 --host 0.0.0.0      # lighter footprint, reachable from LAN
 ```
 
@@ -185,7 +186,7 @@ a thin convenience over it.
 With ds4 v0.5.6.2+ and this repo's installer, Codex self-configures:
 the installer drops a model catalog at `~/.config/ds4/codex-models.json`
 and `ds4-serve` serves it from `/v1/models` in the schema Codex expects
-(real 256K context window, working auto-compaction, Codex's own agent
+(real 512K context window, working auto-compaction, Codex's own agent
 instructions). All Codex needs is the provider block:
 
 ```toml
