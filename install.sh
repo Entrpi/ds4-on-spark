@@ -37,7 +37,21 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-08-11): the Entrpi/ds4 fork release tag v0.5.6.3 —
+# Pin (updated 2026-08-17): the Entrpi/ds4 fork release tag v0.6.0 —
+# the memory-governance release. One governor now decides for every
+# consumer that can grow memory (boot, prewarm, bank plan, serial
+# session, per-call batch graph): one availability observation, one
+# lease ledger, typed refusals whose reason states retryability, and a
+# collect-before-refuse ladder (idle bank pages, then the engine's own
+# unused CUDA graph-pool reserve — DS4_MEM_OWN_TRIM=0 opts out).
+# DS4_MEMGOV=observe is the one-word rollback to the v0.5.x formulas.
+# Also fixes the captured serial decode's stale attention band (present
+# in every v0.5.x) and the aged-server graph-pool hoard. Evidence: a 24h
+# enforcement soak (48/48 cycles), bit-exact goldens, ABBA parity.
+# /metrics gains the memory families, including both raw estimates
+# behind the availability answer.
+#
+# The v0.5.6.3 base underneath —
 # memory-footprint fix for long-running serving on memory-tight boxes
 # (forum 378855 post 86): the KV-cache growth budget is re-tethered
 # to measured capacity at boot (since v0.5.5 it was the bank plan's
@@ -91,7 +105,7 @@ set -euo pipefail
 # DS4_REPO=antirez/ds4 for the upstream engine without the fork's
 # serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.5.6.3}"
+DS4_REF="${DS4_REF:-v0.6.0}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 

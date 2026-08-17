@@ -45,14 +45,32 @@ post-quench serving measured identical to plain (forced-quench identity
 ![Ship decode across context frontiers: plain vs DSpark with quench, two corpora, upstream reference](docs/v041_decode_overlay.svg)
 
 **Status:** Working end-to-end, pinned to the fork release
-[**`v0.5.6`**](https://github.com/Entrpi/ds4/blob/v0.5.6/CHANGELOG.md) — the
-first-class API release on top of the v0.5.1-v0.5.5 robustness line and
+[**`v0.6.0`**](https://github.com/Entrpi/ds4/blob/v0.6.0/CHANGELOG.md) — the
+memory-governance release, on top of the
+[`v0.5.6`](https://github.com/Entrpi/ds4/blob/v0.5.6/CHANGELOG.md)
+first-class API release, the v0.5.1-v0.5.5 robustness line, and
 [`v0.5.0`](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md), the
 deep substrate release described below, shipped together with the
 **DeepSeek-V4-Flash-0731** weights refresh this installer sets up.
 Performance is unchanged across that span (serving twins byte-exact
-through v0.5.5, ABBA parity at v0.5.6), so the numbers and charts here
-still stand. v0.5.6 makes the Anthropic Messages and OpenAI Responses
+through v0.5.5, ABBA parity at v0.5.6 and again at v0.6.0, golden
+vectors bit-exact), so the numbers and charts here still stand.
+
+v0.6.0 makes one memory governor authoritative over every consumer that
+can grow memory — engine boot, warmup, the KV bank plan, the serial
+session, the per-call batch graph. They all ask one evaluator, refusals
+carry a reason that says whether retrying can help, and before refusing
+anything the engine first returns what it can: idle banks' pages, then
+its own unused CUDA graph-pool reserve. `DS4_MEMGOV=observe` rolls the
+whole thing back to the previous behavior in one word. Release evidence
+is a 24 hour enforcement soak, 48 of 48 cycles clean. It also fixes two
+long-standing bugs: the captured serial decode path had been scoring
+attention against a band sized at capture time, leaving tokens generated
+after capture invisible to the selector (present in every v0.5.x), and
+long-lived servers had been hoarding graph-pool reserve that counted
+against their own admission checks.
+
+v0.5.6 underneath makes the Anthropic Messages and OpenAI Responses
 APIs first-class surfaces of the batched engine — all four APIs run in
 the continuous batch, buffered and streaming, with tool-call
 continuations that resume from live engine state under an honest 409
@@ -134,7 +152,8 @@ curl -sSL https://raw.githubusercontent.com/entrpi/ds4-on-spark/main/install.sh 
 That one command:
 
 1. Verifies the host (aarch64, GB10/SM121, CUDA 13, ≥120 GiB free disk).
-2. Clones the `Entrpi/ds4` fork at tag **`v0.5.0`** into `~/code/ds4` (or `$DS4_SRC_DIR`).
+2. Clones the `Entrpi/ds4` fork at the pinned release tag (currently
+   **`v0.6.0`**) into `~/code/ds4` (or `$DS4_SRC_DIR`).
 3. Builds `ds4`, `ds4-server`, `ds4-bench` with `CUDA_ARCH=sm_121` in ~8 s.
 4. Downloads the DeepSeek-V4-Flash-**0731** Q2 GGUF (~81 GiB) from
    [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf)
