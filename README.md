@@ -135,7 +135,7 @@ That one command:
 
 1. Verifies the host (aarch64, GB10/SM121, CUDA 13, ≥120 GiB free disk).
 2. Clones the `Entrpi/ds4` fork at the pinned release tag (currently
-   **`v0.5.6.3`**) into `~/code/ds4` (or `$DS4_SRC_DIR`).
+   **`v0.6.1`**) into `~/code/ds4` (or `$DS4_SRC_DIR`).
 3. Builds `ds4`, `ds4-server`, `ds4-bench` with `CUDA_ARCH=sm_121` in ~8 s.
 4. Downloads the DeepSeek-V4-Flash-**0731** Q2 GGUF (~81 GiB) from
    [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf)

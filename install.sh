@@ -37,7 +37,23 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-08-11): the Entrpi/ds4 fork release tag v0.5.6.3 —
+# Pin (updated 2026-08-18): the Entrpi/ds4 fork release tag v0.6.1 —
+# the memory-truth release: admission charges what a request will
+# actually commit, measured, not feared. Decode credit is a 32k-token
+# tranche instead of a ~393k phantom budget per uncapped request (a
+# refused extension finishes the row cleanly at its funded boundary);
+# the serial session graph leases honestly and an idle reaper returns
+# it (~5.3 GiB) after two minutes of quiet; captured-graph executables
+# are census-visible and idle-trimmed; bank-grant and fit-headroom
+# defaults are re-derived from measurement; --no-serial serves the
+# continuous lane only with typed 503s on every serial route; the
+# projection's only margin is a disclosed, measured 1.02x band with
+# live observed-vs-packed rate export (ds4_cont_commit_bytes_per_token)
+# and a loud warning if they ever diverge past 2x. The concurrent deep
+# shape that failed in the field (a 500k admission in flight beside
+# two 245k admissions) serves with zero refusals on a single Spark;
+# decode under ~1M resident bank tokens runs within 2% of an empty box.
+# The v0.5.6.3 base underneath —
 # memory-footprint fix for long-running serving on memory-tight boxes
 # (forum 378855 post 86): the KV-cache growth budget is re-tethered
 # to measured capacity at boot (since v0.5.5 it was the bank plan's
@@ -91,7 +107,7 @@ set -euo pipefail
 # DS4_REPO=antirez/ds4 for the upstream engine without the fork's
 # serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.5.6.3}"
+DS4_REF="${DS4_REF:-v0.6.1}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
