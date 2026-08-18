@@ -1,127 +1,41 @@
 # ds4-on-spark
 
-This repo gets **[`Entrpi/ds4`](https://github.com/Entrpi/ds4)** — our
-DGX-Spark-optimized, major-feature fork of
-[`antirez/ds4`](https://github.com/antirez/ds4) (DwarfStar 4) — running on
-your Spark with one command, serving **DeepSeek-V4-Flash** entirely on-device
-(GB10 / SM121, 128 GB unified memory — ~119 GiB usable; RTX PRO 6000 /
-5090-class `sm_120` also builds).
+One command gets **[`Entrpi/ds4`](https://github.com/Entrpi/ds4)** serving
+**DeepSeek-V4-Flash** on your DGX Spark, entirely on-device (GB10 / SM121,
+128 GB unified memory, ~119 GiB usable; RTX PRO 6000 / 5090-class
+`sm_120` also builds). `Entrpi/ds4` is a major-feature fork of
+[`antirez/ds4`](https://github.com/antirez/ds4) (DwarfStar 4) that builds
+the upstream engine into a batched multi-request server for Blackwell
+CUDA. Upstream remains the architectural foundation and the model recipe;
+this repo pins and packages the fork.
 
-Compared to the upstream engine you get **2.4–3.3× the prefill throughput**
-(GB10 vs upstream main rebuilt native, 2026-08-01, same gguf; ~4× on a
-PRO 6000 at the v0.1.0 stamp), **1.33–1.47× the decode speed across the
-full 2k–128k context range** (v0.4.1 stamp; v0.5.0 cut deep decode a
-further ~11% at 240k), and a rich serving experience upstream doesn't
-have: **continuous batching** (59 tok/s aggregate at 12 concurrent
-requests), **prefix caching** (warm start cuts time-to-first-token ~7× on
-shared prefixes, with fork-by-copy fan-out for parallel branches and
-disk-persisted KV banks that survive restarts), and **DSpark lossless
-speculative decode** — together, a much faster multi-agent experience
-than single-stream serving.
-The [fork delta table](#what-the-fork-adds-over-upstream) itemizes exactly
-what changed and how each claim was measured; benchmarks, the roofline
-model, and the engineering story follow below. Upstream remains the
-architectural foundation and the model recipe — this repo pins and packages
-the fork.
+Compared to the upstream engine you get **2.4-3.3x the prefill
+throughput**, **1.33-1.47x the decode speed across the full 2k-128k
+context range**, continuous batching, prefix caching with disk-persisted
+KV banks that survive restarts, DSpark lossless speculative decode, and
+since v0.6 a memory governor that held **2.26 million tokens of context
+resident and warm at once** on a single Spark. The
+[fork delta table](#what-the-fork-adds-over-upstream) itemizes exactly
+what changed and how each claim was measured.
 
-**Prefill and generation vs upstream, across the context frontier** (upstream
-`main` at `54b36ed` rebuilt native `sm_121`, measured 2026-08-01 on the same
-box, same instrument, both lines on the same DeepSeek-V4-Flash-**0731** gguf;
-the fork line is the launch-default ship config this installer boots —
-2.43× prefill at 2k, 3.30× at 64k):
+**Status:** working end-to-end, pinned to fork release
+[**`v0.6.1`**](https://github.com/Entrpi/ds4/blob/v0.6.1/CHANGELOG.md),
+the memory-truth release. The engine keeps a single account of its
+memory and makes every decision from it: requests are charged what they
+will actually use, idle memory returns to the pool after a couple of
+minutes of quiet, and when something truly does not fit you get a clear
+refusal that says how many bytes were missing and whether retrying will
+help, never a crash. The default launch context is 512k. The details and
+every knob are in
+[Memory and context](#memory-and-context-the-knobs-that-matter); the
+per-release story is in the fork
+[CHANGELOG](https://github.com/Entrpi/ds4/blob/v0.6.1/CHANGELOG.md).
 
-![Throughput across context frontiers: upstream antirez/ds4 main vs the fork at v0.5.0](docs/v050_upstream_overlay.svg)
+The pieces:
 
-**Decode at the ship config** (DSpark + yield-quench; since v0.4.0 there is
-no kv-depth gate — speculation is armed at every depth and the quench
-controller governs) — solid green is the adversarial-prose floor test,
-dashed orange is code continuation; the fork's ship decode runs 1.47× the
-upstream engine on the low band and 1.33× at 128k. Its own-plain floor is
-the quench controller's bounded learning debt on short generations:
-typically 0.95–0.97× on adversarial prose (band geomean 1.04×), with
-post-quench serving measured identical to plain (forced-quench identity
-1.000–1.004; see the fork CHANGELOG v0.4.1 for the measured mechanism):
-
-![Ship decode across context frontiers: plain vs DSpark with quench, two corpora, upstream reference](docs/v041_decode_overlay.svg)
-
-**Status:** Working end-to-end, pinned to the fork release
-[**`v0.5.6`**](https://github.com/Entrpi/ds4/blob/v0.5.6/CHANGELOG.md) — the
-first-class API release on top of the v0.5.1-v0.5.5 robustness line and
-[`v0.5.0`](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md), the
-deep substrate release described below, shipped together with the
-**DeepSeek-V4-Flash-0731** weights refresh this installer sets up.
-Performance is unchanged across that span (serving twins byte-exact
-through v0.5.5, ABBA parity at v0.5.6), so the numbers and charts here
-still stand. v0.5.6 makes the Anthropic Messages and OpenAI Responses
-APIs first-class surfaces of the batched engine — all four APIs run in
-the continuous batch, buffered and streaming, with tool-call
-continuations that resume from live engine state under an honest 409
-replay contract. The v0.5.1-v0.5.5 line underneath added reliability
-under real agent load: the intermittent CUDA illegal-access crash is
-root-caused and fixed (v0.5.5), interrupted requests leave checkpoints
-so retries resume instead of re-ingesting, dead clients stop costing
-GPU, an operator memory floor gates cache growth against live free
-memory, reasoning effort reaches the model at every context size,
-tool-call budget cuts report `length` rather than `error`, and the
-server checks for updates once a day with `ds4-server --upgrade` to
-apply them.
-Engine side: the flat-pool arc is closed (every per-layer activation
-requantize retired, bit-exactly), CUDA-graph capture covers every
-context depth (a streaming top-512 selection tier replaced the old
->8192-row capture cliff; deep decode at 240K dropped ~11% ms/tok), and
-the speculation break-even guard is recalibrated to the 0731 identity.
-Records on this hardware: a 515K-token admit at 776 tok/s, ~960 tok/s
-prefill at 2k (the best frontier crosses 1,000), and served aggregate
-throughput of 59 tok/s at 12 concurrent requests — double the previous
-stamp. Model side: same ship-recipe quant, dramatically stronger
-knowledge recall (MMLU 63.5 → 79.5 on the frozen harness, needles
-70/70 through 130K real tokens, HumanEval 89.0 cap-corrected), with
-honest deltas documented in the fork changelog (0731 writes longer on
-open instructions and terser on deep retrieval; IFEval moves with it).
-The 0731 checkpoint has **no MTP head** — DSpark is the only
-speculation, with a matching re-extracted drafter, and the installer
-now manages the whole weight upgrade (old-generation files detected
-and optionally removed, prompted, never silent). Since v0.2.2 the
-engine builds its aligned fast-path weight artifacts in-process at
-boot, so **installer setups get the same decode/prefill tier as
-weight-server setups out of the box** (the active tier shows in the
-boot log and `/v1/stats`). Speculative gain is
-content-dependent (structured / code / math wins; adversarial prose sits
-at 1.04× geomean behind the quench governor, typical floor 0.95–0.97× —
-bounded learning debt, see the fork CHANGELOG v0.4.1) — see the
-[two-corpus frontier chart](docs/v041_decode_overlay.svg) and the
-[break-even law](#the-break-even-law) below. The v0.1.1 uplift-suite stamp
-(suite mean ~28 t/s, 1.38× the plain decode of that era, peak 1.71× on
-stepwise math) predates v0.4.0's much faster plain baseline. Prefill runs
-2.4–3.3× the upstream engine on GB10 (D2R tensor-core MoE GEMMs plus the
-v0.5.0 flat-pool work, measured against upstream main `54b36ed`
-2026-08-01). The Metal backend is unaffected.
-
-- **Reference:** [`antirez/ds4`](https://github.com/antirez/ds4) — MIT-licensed C+CUDA inference engine (CUDA backend landed 2026-05-11). **This repo pins the [`Entrpi/ds4`](https://github.com/Entrpi/ds4) fork at release [`v0.5.6`](https://github.com/Entrpi/ds4/blob/v0.5.6/CHANGELOG.md)** (2026-08-08): the first-class API release (Anthropic Messages + OpenAI Responses served in the continuous batch alongside the OpenAI APIs, streaming tool calls batched, tool-call continuations resuming from live engine state with an honest replay contract; performance at ABBA parity), on the deep-decode substrate line through `v0.5.0` (2026-08-01) plus five field-report robustness releases (v0.5.1-v0.5.5: crash fixes, interrupted-work checkpoints, disconnect handling, memory governance, agent-harness honesty; performance byte-exact across that span) — everything through v0.2's robust serving (continuous batching, crash fixes, tools/thinking speculation on the continuous path, deep-context capacity, FP8/FP4 packed compressed-KV as the default primaries, observability), v0.3's tensor-core batched scorer and durable pinned banks (deep conversations survive eviction and restarts), v0.4's head-group flash-decode for dense and indexed attention, aligned dense verify tiers, MoE gate_up expert dedup, speculation armed at every depth (quench governing, no kv-depth gate) plus a community-contributed reap of queued requests whose client disconnected, v0.4.1's quench recalibration (the break-even guard now tracks v0.4's measured verify cost), v0.4.2's community-contributed thinking-mode warm reuse, and v0.5.0's flat-pool arc + capture-at-every-depth + 0731 cutover (quench guard recalibrated to the new model identity; MTP retired with the 0731 checkpoint). The fork `CHANGELOG.md` documents every fork-side change.
-- **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf) — the **DeepSeek-V4-Flash-0731** ~81 GiB asymmetric quant: IQ2_XXS for routed-expert gate/up, Q2_K for routed-expert down (these dominate model bytes), Q8_0 for everything else dense (shared expert, attention projections, output head, router), F16 for LoRA matrices and the compressor/indexer, F32 norms. (FP8 in ds4 is a *runtime* KV-cache quantization — E4M3FN round-trip — not a stored weight format.) Plus the ~7 GiB DSpark drafter from [`bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF`](https://huggingface.co/bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF); the 0731 checkpoint has no MTP head, so there is no MTP gguf for it (the legacy MTP file pairs only with the legacy base).
-- **Hardware:** NVIDIA DGX Spark, GB10, SM121, 128 GB LPDDR5X unified (~119 GiB usable). The donor's `Makefile` has a `make cuda-spark` target that builds native `sm_121`, plus `make cuda CUDA_ARCH=sm_NNN` for an explicit override — both GB10-correct with no patches needed. (Building with an empty `-arch` measured ~25% slower prefill on GB10, so the explicit arch matters.)
-
-## What the fork adds over upstream
-
-[`Entrpi/ds4`](https://github.com/Entrpi/ds4) tracks upstream and specializes
-it for **Blackwell CUDA serving performance**. Everything below is fork-side
-work, measured engine-to-engine against upstream `main` on the same GB10, same
-GGUF (upstream decode measured flat May → July 2026):
-
-| Area | Fork | vs upstream |
-|---|---|---|
-| **Prefill** | D2R ("dequant-to-register") tensor-core MoE GEMMs — IQ2_XXS / Q2_K / Q8_0 expert weights dequantized directly into MMA fragments from aligned SoA artifacts; token-tile HMMA attention; L2-reuse-aware expert-major CTA schedule; flat activation pool (v0.5.0 — every per-layer requantize pass retired, bit-exact) | **2.43× @2k, 3.30× @64k on GB10** (vs main `54b36ed` rebuilt native, 2026-08-01, both lines on the 0731 gguf; 305 → ~1,010 tok/s @12k over the fork's own arc; ~4× on RTX PRO 6000 at the v0.1.0 stamp) |
-| **Decode** | Per-layer CUDA-graph capture at every context depth (v0.5.0 — a streaming top-512 selection tier removed the old >8k-row capture cliff); head-group flash-decode for dense and indexed attention (v0.4.0); aligned-quant dispatch tiers at every verify width | **1.33–1.47× across 2k–128k context** at the ship config (v0.4.1 stamp, [chart](docs/v041_upstream_overlay.svg)); deep decode a further **−11% ms/tok @240k** in v0.5.0 |
-| **Speculation** | DSpark lossless block drafter (3-layer target-fused, Q2K) + terminal yield-quench (net-positive per request, default on); armed at every depth since v0.4.0 — no kv-depth gate; break-even guard recalibrated per model identity (v0.5.0: 2.16 for 0731) | upstream MTP was single-token, net-negative single-stream — and the 0731 checkpoint retired it entirely (DSpark is the only speculation); fork code-corpus band **1.10×** its own plain decode, adversarial prose 1.04× (typical quench floor 0.95–0.97×, bounded learning debt); the vs-upstream win is the headline |
-| **Serving** | Continuous batching (mid-flight admit/evict, chunked prefill interleave), per-bank warm start (~7× TTFT on shared prefixes), fork-by-copy fanout, durable disk-persisted KV banks (v0.3.0), OpenAI + Anthropic-shape APIs | upstream serves one stream; fork aggregate **59 tok/s at 12 concurrent requests** (v0.5.0, [chart](docs/v050_conc_throughput.svg)) |
-| **Thinking-mode turns** | Thinking conversations reuse KV on the continuous path and persist to the disk tier (v0.4.2, community fix by [@fabiopili](https://github.com/fabiopili), [PR #4](https://github.com/Entrpi/ds4/pull/4)) | turn-2 TTFT **53.9 s → 0.69 s** on a 29k-token thinking preamble (full re-prefill pre-fix vs `fork admit cached=32792`; DGX Spark, ctx 49152, 2026-07-24 stamp) |
-| **Ops** | Resident weight server (VMM-backed, IPC manifest) — engines import the 81 GiB model in seconds instead of multi-minute reloads; builds the aligned repack artifacts the fast kernels read in place | upstream reloads per process |
-| **Telemetry** | Per-step speculative trace + offline policy replayer (`tools/dspark_trace_replay.py`), quench/gate/profile counters | — |
-
-Every fork-side change is documented in the fork
-[`CHANGELOG.md`](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md);
-the [roofline analysis](#roofline-why-speculation-and-batching-are-the-levers)
-below explains why these are the changes that matter on this hardware.
+- **Engine:** [`Entrpi/ds4`](https://github.com/Entrpi/ds4) pinned at `v0.6.1`, cloned and built native `sm_121` by the installer.
+- **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf), the DeepSeek-V4-Flash-**0731** ~81 GiB asymmetric quant (IQ2_XXS routed gate/up, Q2_K routed down, Q8_0 everything else dense, F16 compressor/indexer; FP8 in ds4 is a runtime KV-cache format, not a stored weight format), plus the ~6.5 GiB DSpark drafter from [`bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF`](https://huggingface.co/bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF). The 0731 checkpoint has no MTP head; DSpark is the only speculation.
+- **Hardware:** NVIDIA DGX Spark (GB10, SM121, 128 GB LPDDR5X unified). See [Hardware requirements](#hardware-requirements).
 
 ## Quick start
 
@@ -157,29 +71,48 @@ download). On 0731 the fallback ladder is DSpark → plain; `--with-mtp`
 (MTP-2 speculation, a modest ~1.08×) applies only to the legacy
 generation's base + MTP files.
 
-### Serving after install: `ds4-serve`
+To preview without running:
 
-The full-stack launch is one command; every optimization is default-on and
-you only pass what you want to change:
+```bash
+curl -sSL https://raw.githubusercontent.com/entrpi/ds4-on-spark/main/install.sh | bash -s -- --help
+```
+
+Common overrides: `--cuda-arch sm_120` (RTX PRO 6000 / 5090-class Blackwell; datacenter B200/B300 is `sm_100`, untested), `--no-download`
+(reuse existing GGUF), `--src-dir`, `--gguf-dir`, `--ctx`, `--port`, `--force`
+(skip host check).
+
+## Serving: `ds4-serve`
+
+The installer puts `ds4-serve` on your PATH. The full-stack launch is
+one command; every optimization is default-on and you only pass what you
+want to change:
 
 ```bash
 ds4-serve                              # full stack, ctx 524288, 127.0.0.1:8000
 ds4-serve -c 786432                    # deepest tested context (768K)
-ds4-serve -c 32768 --host 0.0.0.0      # lighter footprint, reachable from LAN
+ds4-serve -c 32768 --host 0.0.0.0      # smaller context, reachable from LAN
 ```
 
-Anything you pass goes straight to `ds4-server` and overrides the defaults
-(`ds4-server --help` lists everything, `--cors` included). `--no-dspark` /
-`--no-spec` downgrade to plain decode on 0731 (on the legacy generation
-`--no-dspark` falls back to MTP-2 instead). Sizing `-c`:
-the context budget is shared by concurrent sequences (KV ≈9.5 KiB/token), so
-bigger `-c` means fewer parallel requests fit before new ones queue. It runs
-in the foreground; supervise with nohup/systemd/tmux as you prefer.
+Anything you pass goes straight to `ds4-server` and overrides the
+defaults (`ds4-server --help` lists everything, `--cors` included).
+`--no-dspark` / `--no-spec` serve plain continuous decode instead. It
+runs in the foreground; supervise with nohup/systemd/tmux as you prefer.
 
-As of the v0.2.3 pin the engine itself has the same launch defaults: on this
-install layout a bare `ds4-server -c 49152 --host 0.0.0.0` boots the full
-stack too (one boot line reports what was auto-enabled). `ds4-serve` remains
-a thin convenience over it.
+Sizing `-c` stopped being a memory decision in v0.6: unused context is
+demand-mapped, so a deep `-c` costs almost nothing until a request
+actually fills it. The default is 512k and the deepest proven setting
+is `-c 786432`. What each request pays for is its prompt plus its
+decode budget (`max_tokens`, assumed 32768 when the client omits it),
+and how many requests can hold context at once is the bank count. Both
+are explained in
+[Memory and context](#memory-and-context-the-knobs-that-matter).
+
+## Connecting agents
+
+`ds4-server` speaks four APIs from one continuous batch: OpenAI chat
+completions and completions, OpenAI Responses (the surface Codex uses),
+and Anthropic Messages (the surface Claude Code uses). Streaming, tool
+calls, and thinking all ride the batched path.
 
 ### Pointing OpenAI Codex at the box
 
@@ -220,15 +153,119 @@ thinking turns tripping Codex's ~300 s idle timer. Claude Code needs
 none of this; its compaction works against the Anthropic surface out
 of the box.
 
-To preview without running:
+### Claude Code, opencode, Pi
+
+Claude Code works against the Anthropic surface out of the box: point
+`ANTHROPIC_BASE_URL` at `http://YOUR_SPARK:8000` and select the model
+`deepseek-v4-flash`. A complete wrapper script, plus provider configs
+for opencode and Pi, are in the engine README's
+[Agent Client Usage](https://github.com/Entrpi/ds4#agent-client-usage)
+section.
+
+## Memory and context: the knobs that matter
+
+Since fork v0.6 the engine keeps a single account of its memory and
+makes every decision from it. Nothing is reserved up front: context
+lives in virtual banks whose pages materialize only as requests fill
+them, each admission is charged the memory it will actually use, and
+idle memory returns to the pool after a couple of minutes of quiet.
+When something truly does not fit, you get a typed refusal that says
+how many bytes were missing and whether retrying can help, never a
+crash. An absolute floor protects the box itself: no admission may push
+system free memory below 4 GiB.
+
+Two decisions cover most operator needs:
+
+- **Context limit** (`-c`) is the per-request ceiling. A request pays
+  for its prompt plus its decode budget (`max_tokens`, assumed 32768
+  when omitted), and that sum must fit under `-c` or the request gets a
+  clean typed 400. A deep `-c` itself is free until used.
+- **Bank count** is how many requests can hold warm context at once.
+  It is derived from `-c` at boot (32 banks at 32k context, halving as
+  the context grows, floor 4 from 256k up) and fixed for the server's
+  lifetime. An admission beyond the bank count evicts the
+  least-recently-used idle bank; it does not refuse.
+
+| Knob | Default | What it does and when to change it |
+|---|---|---|
+| `-c` / `--ctx` | `524288` via `ds4-serve` (the bare CUDA engine defaults to `262144`) | The per-request context ceiling. Each request must fit its prompt plus its decode budget under this, or it gets a typed 400. Raise it for deeper documents (786432 is the deepest proven); unused context is demand-mapped, so a deep ceiling costs almost nothing until a request fills it. |
+| `DS4_SERVER_COALESCE_MAX` | unset: derived from `-c` (32 banks at 32k context, halving as context grows, 4 from 256k up) | How many requests can hold warm context at once (the bank count). Set it (1..64) to override the derivation, e.g. more, shallower banks for high-concurrency batch work. Boot may reduce the count to fit memory, never raise it, and it is fixed until restart. A request beyond the bank count evicts the least-recently-used idle bank. |
+| `--mem-floor-gb` (env `DS4_MEM_FLOOR_GB`) | `4` | The engine never admits work that would leave the system under this many GiB of free memory: it reclaims idle cache first and refuses with a typed error if that is not enough. Lower it (down to 1) on a dedicated serving box to fund more context; raise it on a machine you also work on. |
+| `max_tokens` (request field, not a flag) | `32768` assumed when the client omits it | The decode budget a request is charged at admission, on top of its prompt. Agents that omit it are charged the full 32768, so set it explicitly when a deep prompt must fit: prompt + `max_tokens` must stay under `-c`. An oversized value is clamped and reported as `length`, never an error. |
+| `DS4_CONT_ADMIT_BAND_X1024` | `1045` | Admission charges each request its measured memory need times a small safety margin, expressed in 1024ths: 1045/1024 means about 2% above the measurement, absorbing allocation transients. Set `1024` to charge exactly the measured need; raise it if admitted work ever brushes the floor. |
+| `DS4_MEMGOV` | unset (the governor's verdicts are binding) | Set to `observe` to fall back to the pre-v0.6 memory formulas: the governor keeps evaluating and reporting on `/metrics`, but stops deciding. The one-word escape hatch if a memory decision ever looks wrong. |
+| `DS4_CONT_PREFILL_CHUNK` / `DS4_CONT_PREFILL_CHUNK_LIVE` | `4096` / `4096` | Long prompts are ingested this many tokens at a time so a big admission never blocks the server. The `_LIVE` value applies while other requests are actively decoding: smaller keeps live decode smoother, larger ingests faster. |
+| `DS4_SERVER_CONTINUOUS` | `1` (continuous batching on) | Set to `0` to serve one request at a time on the old serial path. Only worth considering for single-user, latency-critical setups. |
+| `DS4_BATCH_VMM_TRIM` | `1` (reclaim allowed) | When an admission does not fit, the engine may release idle banks' memory to fund it; the reclaimed conversation then needs a disk restore or re-prefill when it returns. Set to `0` to forbid that: resident context is never sacrificed, and the admission is refused instead. |
+
+The proving run for this release booted zero-config at `-c 786432` and
+admitted three ingestions of about 755 thousand tokens each, back to
+back: **2.26 million tokens of context resident and warm at once**,
+zero refusals, the 4 GiB floor intact. A fourth deep ingestion was
+funded by reclaiming an idle bank (the cheapest to restore), not
+refused.
+Decode measured at parity with an empty box at 450k-token depth and
+within 15 percent at 755k; the observed all-in cost was about 4.3 KiB
+per token of resident context.
+
+### Reaching 3M+ tokens of active context
+
+The proving run above kept every protective default. To push a Spark to
+its actual ceiling, remove the three things that stop the fill before
+the memory does:
+
+1. **Strip the host first.** A desktop-image Spark spends 10-15 GB of
+   unified memory on GNOME, snaps, and maintenance timers.
+   [dgx-spark-serving-mode](https://github.com/Entrpi/dgx-spark-serving-mode)
+   switches the box between desktop and headless serving profiles (SSH,
+   networking, and the NVIDIA plumbing stay; the desktop goes, and comes
+   back with `off`). That is the first ~10 GB of headroom.
+2. **Lower the refusal floor.** `DS4_MEM_FLOOR_GB=1` moves the
+   admission line from 4 GiB free to 1 GiB free. Reasonable on a
+   dedicated serving box; keep the default 4 on a machine you also
+   work on.
+3. **Let the bank plan match the ambition.** `DS4_SERVER_COALESCE_MAX=6`
+   with `-c 786432`: at ~755k tokens per ingestion the fill needs a
+   fifth bank, and the default 4-bank plan would cap the fill well
+   before the floor does.
+4. Optional, for strict residency guarantees: `DS4_BATCH_VMM_TRIM=0`
+   makes the engine refuse new work outright instead of reclaiming idle
+   banks' memory to fund it, so resident context is never sacrificed.
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/entrpi/ds4-on-spark/main/install.sh | bash -s -- --help
+DS4_MEM_FLOOR_GB=1 DS4_SERVER_COALESCE_MAX=6 DS4_BATCH_VMM_TRIM=0 \
+  ds4-serve -c 786432
 ```
 
-Common overrides: `--cuda-arch sm_120` (RTX PRO 6000 / 5090-class Blackwell; datacenter B200/B300 is `sm_100`, untested), `--no-download`
-(reuse existing GGUF), `--src-dir`, `--gguf-dir`, `--ctx`, `--port`, `--force`
-(skip host check).
+At the measured ~4.3 KiB per resident token, a stripped box booting
+with ~15 GiB free funds a bit over 3 million tokens of active context
+before the 1 GiB floor starts refusing work.
+
+One hardware note: otherwise identical GB10 boxes do not report the
+same total memory. Of the two reference machines behind this README,
+one reports `MemTotal` 127,535,152 kB and the other 125,442,416 kB, a
+2.0 GiB gap. Budget against `MemAvailable` measured on your own box,
+not against numbers from someone else's.
+
+### If you come from vLLM or SGLang
+
+The design assumption differs. vLLM and SGLang assume a dedicated GPU:
+claim a fixed fraction of its memory at boot, then manage KV inside
+that reservation. ds4 assumes a 128 GB unified-memory box that is also
+running an OS and maybe your other work: hoard nothing, measure every
+admission against live free memory, and refuse with a reason rather
+than degrade. Flag semantics below were checked against the vLLM and
+SGLang docs in August 2026.
+
+| | ds4 v0.6 | vLLM | SGLang |
+|---|---|---|---|
+| Context limit | `-c` (default 512k installed, 256k bare engine) | `--max-model-len` (default: model config) | `--context-length` (default: model config) |
+| Memory reservation | none; banks are virtual, pages materialize on use | `--gpu-memory-utilization` fraction pre-reserved at boot (default 0.9) | `--mem-fraction-static` pre-reserved at boot (default auto, ~0.88) |
+| Concurrency | bank count, derived from `-c` (override `DS4_SERVER_COALESCE_MAX`) | `--max-num-seqs` | `--max-running-requests` |
+| Admission control | each request charged its measured prompt + decode budget against live free memory | fits if KV blocks are available inside the reservation | fits if pool tokens are available inside the reservation |
+| When memory runs out | typed refusal stating the byte shortfall and whether retry can help; a 4 GiB floor (`--mem-floor-gb`) protects the host | preempts a request and recomputes it later (V1 default) | retracts a request and re-queues it |
+| Prefix reuse | warm KV banks plus disk-persisted banks that survive restarts | prefix caching (on by default in V1) | radix cache (on by default) |
+| Chunked prefill | on by default (`DS4_CONT_PREFILL_CHUNK`), interleaved with live decode | on by default in V1 | `--chunked-prefill-size` |
 
 ## Upgrading from an earlier install
 
@@ -298,18 +335,106 @@ Anything else gets a warning + `--force` override path.
 | Binary | Purpose |
 |---|---|
 | `ds4` | Interactive / one-shot CLI |
-| `ds4-server` | OpenAI v1-compatible HTTP server (`POST /v1/chat/completions`, SSE streaming) |
+| `ds4-server` | HTTP server: OpenAI + Anthropic APIs from one continuous batch |
 | `ds4-bench` | Direct prefill + decode throughput sweep (no HTTP) |
 
-`ds4-server` is the recommended runtime. It exposes:
+`ds4-server` is the recommended runtime. All four API surfaces run in
+the continuous batch, buffered and streaming:
 
-- `POST /v1/chat/completions` (OpenAI-compatible streaming, tool calls)
-- `POST /v1/completions`
-- `GET /v1/models`
+- `POST /v1/chat/completions` and `POST /v1/completions` (OpenAI)
+- `POST /v1/responses` (OpenAI Responses, used by Codex)
+- `POST /v1/messages` (Anthropic Messages, used by Claude Code)
+- `GET /v1/models`, `GET /metrics` (Prometheus), `GET /v1/stats` (live status board)
 
-It also speaks Anthropic-shape on `/v1/messages` (see donor README).
+## Performance
 
-## DSpark: the featured serving mode
+Every number in this README comes from a single DGX Spark (GB10,
+`sm_121`, `compute_cap=12.1`, CUDA 13.0.88), measured through the real
+serving path ([`eugr/llama-benchy`](https://github.com/eugr/llama-benchy),
+non-streaming wall tok/s) unless marked engine-side. Older numbers keep
+their release stamps; serving performance is unchanged across the
+releases since each stamp (byte-exact or ABBA-parity at every cut).
+
+### What the fork adds over upstream
+
+[`Entrpi/ds4`](https://github.com/Entrpi/ds4) tracks upstream and specializes
+it for **Blackwell CUDA serving performance**. Everything below is fork-side
+work, measured engine-to-engine against upstream `main` on the same GB10, same
+GGUF (upstream decode measured flat May → July 2026):
+
+| Area | Fork | vs upstream |
+|---|---|---|
+| **Prefill** | D2R ("dequant-to-register") tensor-core MoE GEMMs — IQ2_XXS / Q2_K / Q8_0 expert weights dequantized directly into MMA fragments from aligned SoA artifacts; token-tile HMMA attention; L2-reuse-aware expert-major CTA schedule; flat activation pool (v0.5.0 — every per-layer requantize pass retired, bit-exact) | **2.43× @2k, 3.30× @64k on GB10** (vs main `54b36ed` rebuilt native, 2026-08-01, both lines on the 0731 gguf; 305 → ~1,010 tok/s @12k over the fork's own arc; ~4× on RTX PRO 6000 at the v0.1.0 stamp) |
+| **Decode** | Per-layer CUDA-graph capture at every context depth (v0.5.0 — a streaming top-512 selection tier removed the old >8k-row capture cliff); head-group flash-decode for dense and indexed attention (v0.4.0); aligned-quant dispatch tiers at every verify width | **1.33–1.47× across 2k–128k context** at the ship config (v0.4.1 stamp, [chart](docs/v041_upstream_overlay.svg)); deep decode a further **−11% ms/tok @240k** in v0.5.0 |
+| **Speculation** | DSpark lossless block drafter (3-layer target-fused, Q2K) + terminal yield-quench (net-positive per request, default on); armed at every depth since v0.4.0 — no kv-depth gate; break-even guard recalibrated per model identity (v0.5.0: 2.16 for 0731) | upstream MTP was single-token, net-negative single-stream — and the 0731 checkpoint retired it entirely (DSpark is the only speculation); fork code-corpus band **1.10×** its own plain decode, adversarial prose 1.04× (typical quench floor 0.95–0.97×, bounded learning debt); the vs-upstream win is the headline |
+| **Serving** | Continuous batching (mid-flight admit/evict, chunked prefill interleave), per-bank warm start (~7× TTFT on shared prefixes), fork-by-copy fanout, durable disk-persisted KV banks (v0.3.0), OpenAI + Anthropic-shape APIs | upstream serves one stream; fork aggregate **59 tok/s at 12 concurrent requests** (v0.5.0, [chart](docs/v050_conc_throughput.svg)) |
+| **Thinking-mode turns** | Thinking conversations reuse KV on the continuous path and persist to the disk tier (v0.4.2, community fix by [@fabiopili](https://github.com/fabiopili), [PR #4](https://github.com/Entrpi/ds4/pull/4)) | turn-2 TTFT **53.9 s → 0.69 s** on a 29k-token thinking preamble (full re-prefill pre-fix vs `fork admit cached=32792`; DGX Spark, ctx 49152, 2026-07-24 stamp) |
+| **Ops** | Resident weight server (VMM-backed, IPC manifest) — engines import the 81 GiB model in seconds instead of multi-minute reloads; builds the aligned repack artifacts the fast kernels read in place | upstream reloads per process |
+| **Telemetry** | Per-step speculative trace + offline policy replayer (`tools/dspark_trace_replay.py`), quench/gate/profile counters | — |
+
+Every fork-side change is documented in the fork
+[`CHANGELOG.md`](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md);
+the [roofline analysis](#roofline-why-speculation-and-batching-are-the-levers)
+below explains why these are the changes that matter on this hardware.
+
+**Prefill and generation vs upstream, across the context frontier** (upstream
+`main` at `54b36ed` rebuilt native `sm_121`, measured 2026-08-01 on the same
+box, same instrument, both lines on the same DeepSeek-V4-Flash-**0731** gguf;
+the fork line is the launch-default ship config this installer boots —
+2.43× prefill at 2k, 3.30× at 64k):
+
+![Throughput across context frontiers: upstream antirez/ds4 main vs the fork at v0.5.0](docs/v050_upstream_overlay.svg)
+
+**Decode at the ship config** (DSpark + yield-quench; since v0.4.0 there is
+no kv-depth gate — speculation is armed at every depth and the quench
+controller governs) — solid green is the adversarial-prose floor test,
+dashed orange is code continuation; the fork's ship decode runs 1.47× the
+upstream engine on the low band and 1.33× at 128k. Its own-plain floor is
+the quench controller's bounded learning debt on short generations:
+typically 0.95–0.97× on adversarial prose (band geomean 1.04×), with
+post-quench serving measured identical to plain (forced-quench identity
+1.000–1.004; see the fork CHANGELOG v0.4.1 for the measured mechanism):
+
+![Ship decode across context frontiers: plain vs DSpark with quench, two corpora, upstream reference](docs/v041_decode_overlay.svg)
+
+### Benchmarks
+
+The headline numbers in one place (re-stamped at v0.5.0 on the 0731
+weights, 2026-08-01, unless marked with an earlier stamp):
+
+| metric | value | evidence |
+|---|---|---|
+| Prefill (engine-side) | ~960 tok/s @2k, ~1,010 @12k, ~933 @64k — **2.43× upstream @2k, 3.30× @64k** (~4× on RTX PRO 6000 at the v0.1.0 stamp); 515K tokens admitted at **776 tok/s** sustained | [frontier chart](docs/v050_upstream_overlay.svg) |
+| Plain continuous decode | 20.0 tok/s @2k, 17.7 @48k (`--no-spec`) — v0.4.1 stamp | [decode chart](docs/v041_decode_overlay.svg) |
+| Ship decode vs upstream | **1.47×** low-band geomean, 1.33× @128k, spec armed at every depth — v0.4.1 stamp | [frontier chart](docs/v041_upstream_overlay.svg) |
+| DSpark decode, 9-workload suite | mean **27.7 tok/s (1.38×)**, best 34.5 (1.71×) — v0.1.1 stamp, predates the faster v0.4.0 plain baseline | [suite table](#dspark-the-featured-serving-mode) |
+| DSpark vs own plain | code-corpus band **1.10×** geomean, adversarial prose 1.04× (typical quench floor 0.95–0.97×, bounded learning debt) | [two-corpus chart](docs/v041_decode_overlay.svg) |
+| Deep serving decode (engine-side) | **45.7 ms/tok @240K at ~2.9 tok/step** — capture at every depth (v0.4.1: 57.3, v0.3.0: 76.3) | [fork changelog](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md) |
+| Concurrent serving | **59 tok/s aggregate** @12 concurrent, saturating ≈8–12 requests (v0.1.1 stamp: ~30, saturating ≈4) | [concurrency chart](docs/v050_conc_throughput.svg) |
+| Build | `make CUDA_ARCH=sm_121` ≈ 8 s | installer output |
+| Cold start | ~20 s direct model attach; **seconds** as a weight-server client | — |
+
+Reproduce on your own Spark:
+
+```bash
+# install + serve the DSpark ship default on :8000
+curl -sSL https://raw.githubusercontent.com/entrpi/ds4-on-spark/main/install.sh | bash -s -- --start
+
+# llama-benchy against the running server (needs uv: https://docs.astral.sh/uv/)
+./scripts/run-bench.sh --pp 2048 --tg 128 512 --depth 0 4096 16384
+
+# concurrency sweep (the concurrency chart's shape)
+./scripts/run-bench.sh --pp 2048 --tg 256 --concurrency 1 2 4 8 16
+
+# plain-decode comparison leg
+pkill -x ds4-server; ./install.sh --start --no-dspark
+
+# raw memory-bandwidth ceiling (feeds the roofline below)
+/usr/local/cuda/bin/nvcc -O3 -arch=sm_121 bench/bw_bench.cu -o /tmp/bw_bench
+/tmp/bw_bench 8192
+```
+
+### DSpark: the featured serving mode
 
 Since fork `v0.1.1`, the featured runtime is **continuous batching + DSpark
 lossless speculative decode** (a DFlash-style drafter verified by the target
@@ -365,7 +490,7 @@ safety nets bound the losses:
   gate). Setting `DS4_DSPARK_MAX_KV=N` restores a hard depth cap if you
   want one.
 
-### The break-even law
+#### The break-even law
 
 One DSpark verify step (1 committed row + 4 draft rows through the full
 model) costs **2.03–2.08 plain decode steps** on GB10 across the 2k–64k
@@ -388,7 +513,7 @@ calibrated offline against per-step traces (`DS4_DSPARK_TRACE=1` +
 `tools/dspark_trace_replay.py` in the fork) and the in-engine controller is
 validated to reproduce the offline policy exactly.
 
-### The drafter artifact
+#### The drafter artifact
 
 The installer downloads the prebuilt ~6.5 GiB Q2K drafter matching your
 base's generation (`DSpark-drafter-Q2K-Q8-0731.gguf` for 0731) from
@@ -411,48 +536,7 @@ Kill switches if you ever need them: `DS4_DSPARK_QUENCH=0` (always-spec, no
 quench), `DS4_DSPARK_MAX_KV=N` (restore a hard depth cap), `--no-dspark` at
 install / `DS4_CONT_DSPARK` unset (no DSpark).
 
-## Benchmarks
-
-Hardware for every number in this README: a single DGX Spark — GB10,
-`sm_121`, `compute_cap=12.1`, CUDA 13.0.88 — measured through the real
-serving path ([`eugr/llama-benchy`](https://github.com/eugr/llama-benchy),
-non-streaming wall tok/s) unless marked engine-side. The headline numbers
-in one place (re-stamped at v0.5.0 on the 0731 weights, 2026-08-01,
-unless marked with an earlier stamp):
-
-| metric | value | evidence |
-|---|---|---|
-| Prefill (engine-side) | ~960 tok/s @2k, ~1,010 @12k, ~933 @64k — **2.43× upstream @2k, 3.30× @64k** (~4× on RTX PRO 6000 at the v0.1.0 stamp); 515K tokens admitted at **776 tok/s** sustained | [frontier chart](docs/v050_upstream_overlay.svg) |
-| Plain continuous decode | 20.0 tok/s @2k, 17.7 @48k (`--no-spec`) — v0.4.1 stamp | [decode chart](docs/v041_decode_overlay.svg) |
-| Ship decode vs upstream | **1.47×** low-band geomean, 1.33× @128k, spec armed at every depth — v0.4.1 stamp | [frontier chart](docs/v041_upstream_overlay.svg) |
-| DSpark decode, 9-workload suite | mean **27.7 tok/s (1.38×)**, best 34.5 (1.71×) — v0.1.1 stamp, predates the faster v0.4.0 plain baseline | [suite table](#dspark-the-featured-serving-mode) |
-| DSpark vs own plain | code-corpus band **1.10×** geomean, adversarial prose 1.04× (typical quench floor 0.95–0.97×, bounded learning debt) | [two-corpus chart](docs/v041_decode_overlay.svg) |
-| Deep serving decode (engine-side) | **45.7 ms/tok @240K at ~2.9 tok/step** — capture at every depth (v0.4.1: 57.3, v0.3.0: 76.3) | [fork changelog](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md) |
-| Concurrent serving | **59 tok/s aggregate** @12 concurrent, saturating ≈8–12 requests (v0.1.1 stamp: ~30, saturating ≈4) | [concurrency chart](docs/v050_conc_throughput.svg) |
-| Build | `make CUDA_ARCH=sm_121` ≈ 8 s | installer output |
-| Cold start | ~20 s direct model attach; **seconds** as a weight-server client | — |
-
-Reproduce on your own Spark:
-
-```bash
-# install + serve the DSpark ship default on :8000
-curl -sSL https://raw.githubusercontent.com/entrpi/ds4-on-spark/main/install.sh | bash -s -- --start
-
-# llama-benchy against the running server (needs uv: https://docs.astral.sh/uv/)
-./scripts/run-bench.sh --pp 2048 --tg 128 512 --depth 0 4096 16384
-
-# concurrency sweep (the concurrency chart's shape)
-./scripts/run-bench.sh --pp 2048 --tg 256 --concurrency 1 2 4 8 16
-
-# plain-decode comparison leg
-pkill -x ds4-server; ./install.sh --start --no-dspark
-
-# raw memory-bandwidth ceiling (feeds the roofline below)
-/usr/local/cuda/bin/nvcc -O3 -arch=sm_121 bench/bw_bench.cu -o /tmp/bw_bench
-/tmp/bw_bench 8192
-```
-
-## Roofline: why speculation and batching are the levers
+### Roofline: why speculation and batching are the levers
 
 Kernel-effective memory bandwidth measured on GB10 with
 [`bench/bw_bench.cu`](bench/bw_bench.cu): **~215 GB/s** copy (read+write),
@@ -476,26 +560,7 @@ decode sits at the bandwidth wall, the only ways forward are:
 - **read fewer bytes** — a tighter quant (FP4 / 1.5-bit experts), not
   currently pursued.
 
-## Under the hood
-
-[**docs/METAL_VS_CUDA.md**](docs/METAL_VS_CUDA.md) is a side-by-side analysis
-of the upstream engine's two GPU backends — kernel surface, command
-lifecycle, model attach, quantization handling (May 2026 snapshot; still an
-accurate map of upstream and of what the fork inherited). The fork's CUDA
-backend has since diverged where it counts: D2R tensor-core MoE prefill
-kernels, token-tile HMMA attention, per-layer CUDA-graph decode capture, a
-multi-sequence batched forward, and the weight-server import path — each
-documented in the fork
-[`CHANGELOG.md`](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md).
-
-Two inherited facts worth knowing as an operator: the engine attaches the
-mmap'd GGUF zero-copy via `cudaHostRegister` when the host allows it (the
-~20 s cold load is the chunked-copy fallback; weight-server clients skip the
-question entirely and import in seconds), and routed experts stay quantized
-in memory with inline dequant — pre-converting all 256 experts to F16 would
-erase the 2-bit memory win.
-
-## Concurrency on `ds4-server`
+### Concurrency on `ds4-server`
 
 Since the fork's batched-serving line (v0.1.0+), `ds4-server` runs
 **continuous batching by default**: concurrent requests are admitted
@@ -523,7 +588,7 @@ plain batched decode. That is the practical guidance: a single agent gets
 DSpark speeds; a fleet gets ~59 tok/s of aggregate decode plus the
 prefix-cache TTFT wins.
 
-## What about upstream MTP?
+### What about upstream MTP?
 
 Upstream shipped a single-token MTP head for the legacy base (`--mtp`,
 3.6 GiB draft GGUF, labeled alpha); the 0731 checkpoint retired it —
@@ -557,6 +622,25 @@ needle-in-a-haystack **70/70 through 130k real tokens**. The full
 two-generation table with the honest caveats is in the fork
 [CHANGELOG](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md).
 Remarkable numbers for a 2-bit-expert quant; credit the upstream recipe.
+
+## Under the hood
+
+[**docs/METAL_VS_CUDA.md**](docs/METAL_VS_CUDA.md) is a side-by-side analysis
+of the upstream engine's two GPU backends — kernel surface, command
+lifecycle, model attach, quantization handling (May 2026 snapshot; still an
+accurate map of upstream and of what the fork inherited). The fork's CUDA
+backend has since diverged where it counts: D2R tensor-core MoE prefill
+kernels, token-tile HMMA attention, per-layer CUDA-graph decode capture, a
+multi-sequence batched forward, and the weight-server import path — each
+documented in the fork
+[`CHANGELOG.md`](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md).
+
+Two inherited facts worth knowing as an operator: the engine attaches the
+mmap'd GGUF zero-copy via `cudaHostRegister` when the host allows it (the
+~20 s cold load is the chunked-copy fallback; weight-server clients skip the
+question entirely and import in seconds), and routed experts stay quantized
+in memory with inline dequant — pre-converting all 256 experts to F16 would
+erase the 2-bit memory win.
 
 ## Repo layout
 
