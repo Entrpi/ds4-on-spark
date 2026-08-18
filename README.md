@@ -237,9 +237,20 @@ DS4_MEM_FLOOR_GB=1 DS4_SERVER_COALESCE_MAX=6 DS4_BATCH_VMM_TRIM=0 \
   ds4-serve -c 786432
 ```
 
-At the measured ~4.3 KiB per resident token, a stripped box booting
-with ~15 GiB free funds a bit over 3 million tokens of active context
-before the 1 GiB floor starts refusing work.
+Measured with exactly this configuration (2026-08-18, a worked box
+booting with 14.3 GiB free): **3,019,176 tokens of active context** —
+four ingestions of ~755k tokens each, a needle retrieved exactly from
+every one, and then honest, instant refusals for every further ask
+(740k down to 92k) with the 1 GiB floor intact (observed minimum
+1.1 GiB free). A stripped fresh box boots with more free and lands
+correspondingly higher.
+
+The honest cost: at that full squeeze, decode ran 2.6x slower than an
+empty box (the OS starts reclaiming file-backed weight pages when
+almost nothing is free). At 2.26M under the shipped 4 GiB floor the
+same stamp is 1.14x. The last ~750k tokens of capacity are paid for
+in decode speed; that trade is exactly what the floor setting
+controls.
 
 One hardware note: otherwise identical GB10 boxes do not report the
 same total memory. Of the two reference machines behind this README,
