@@ -208,6 +208,11 @@ Decode measured at parity with an empty box at 450k-token depth and
 within 15 percent at 755k; the observed all-in cost was about 4.3 KiB
 per token of resident context.
 
+The window itself reaches the model's full million: at `-c 1048576` a
+single conversation of **975,246 tokens** was admitted and continued
+warm in place, with a 2.0 s time to first token and decode at 88 ms
+per token at that depth.
+
 ### Reaching 3M+ tokens of active context
 
 The proving run above kept every protective default. To push a Spark to
