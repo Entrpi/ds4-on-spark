@@ -19,21 +19,24 @@ resident and warm at once** on a single Spark. The
 what changed and how each claim was measured.
 
 **Status:** working end-to-end, pinned to fork release
-[**`v0.6.1`**](https://github.com/Entrpi/ds4/blob/v0.6.1/CHANGELOG.md),
-the memory-truth release. The engine keeps a single account of its
+[**`v0.6.2`**](https://github.com/Entrpi/ds4/blob/v0.6.2/CHANGELOG.md),
+the real-budgets release. The engine keeps a single account of its
 memory and makes every decision from it: requests are charged what they
-will actually use, idle memory returns to the pool after a couple of
-minutes of quiet, and when something truly does not fit you get a clear
-refusal that says how many bytes were missing and whether retrying will
-help, never a crash. The default launch context is 512k. The details and
-every knob are in
+will actually use, every floor and margin in the plan is derived from a
+measurement rather than a constant, idle memory returns to the pool
+after a couple of minutes of quiet, and when something truly does not
+fit you get a clear refusal that says how many bytes were missing and
+whether retrying will help, never a crash. While serving, the engine
+audits its own account: an idle reconciliation line checks the box's
+raw memory drop against the ledger and logs the residual. The default
+launch context is 512k. The details and every knob are in
 [Memory and context](#memory-and-context-the-knobs-that-matter); the
 per-release story is in the fork
-[CHANGELOG](https://github.com/Entrpi/ds4/blob/v0.6.1/CHANGELOG.md).
+[CHANGELOG](https://github.com/Entrpi/ds4/blob/v0.6.2/CHANGELOG.md).
 
 The pieces:
 
-- **Engine:** [`Entrpi/ds4`](https://github.com/Entrpi/ds4) pinned at `v0.6.1`, cloned and built native `sm_121` by the installer.
+- **Engine:** [`Entrpi/ds4`](https://github.com/Entrpi/ds4) pinned at `v0.6.2`, cloned and built native `sm_121` by the installer.
 - **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf), the DeepSeek-V4-Flash-**0731** ~81 GiB asymmetric quant (IQ2_XXS routed gate/up, Q2_K routed down, Q8_0 everything else dense, F16 compressor/indexer; FP8 in ds4 is a runtime KV-cache format, not a stored weight format), plus the ~6.5 GiB DSpark drafter from [`bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF`](https://huggingface.co/bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF). The 0731 checkpoint has no MTP head; DSpark is the only speculation.
 - **Hardware:** NVIDIA DGX Spark (GB10, SM121, 128 GB LPDDR5X unified). See [Hardware requirements](#hardware-requirements).
 
@@ -49,7 +52,7 @@ That one command:
 
 1. Verifies the host (aarch64, GB10/SM121, CUDA 13, ≥120 GiB free disk).
 2. Clones the `Entrpi/ds4` fork at the pinned release tag (currently
-   **`v0.6.1`**) into `~/code/ds4` (or `$DS4_SRC_DIR`).
+   **`v0.6.2`**) into `~/code/ds4` (or `$DS4_SRC_DIR`).
 3. Builds `ds4`, `ds4-server`, `ds4-bench` with `CUDA_ARCH=sm_121` in ~8 s.
 4. Downloads the DeepSeek-V4-Flash-**0731** Q2 GGUF (~81 GiB) from
    [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf)

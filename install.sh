@@ -37,7 +37,27 @@ set -euo pipefail
 # 0. defaults + flag parsing
 # ============================================================================
 
-# Pin (updated 2026-08-18): the Entrpi/ds4 fork release tag v0.6.1 —
+# Pin (updated 2026-08-19): the Entrpi/ds4 fork release tag v0.6.2 —
+# the real-budgets release: every remaining floor and margin in the
+# memory plan is a measurement, and the account proves itself. The
+# boot bank count is priced from the live budget (the 262144 default
+# boots 9 banks where the old ladder froze 4; an explicit
+# DS4_SERVER_COALESCE_MAX stays a deterministic pin); the anti-thrash
+# floor prices two full-depth working sets at what they actually
+# commit, not their virtual extents (26.71 -> 6.68 GiB at -c 786432),
+# so measured capacity governs the KV budget honestly at depth; boot
+# planning headroom derives from the operator floor plus a boot-burst
+# margin (~3 GiB returned on a stripped 1 GiB-floor box); trim victims
+# are chosen invalid-first then longest-idle and named in the log; and
+# an idle-tick reconciliation line checks the box's raw memory drop
+# against the engine's own ledger (residual held to 2-19 MiB vs a
+# 256 MiB tolerance across the gate battery; also on /v1/stats and
+# /metrics). CUDA default context rises to 262144 (was 32768; this
+# installer's ds4-serve still passes 524288), and the weight-server
+# manifest carries a content fingerprint so a stale checkpoint of
+# identical size is refused at boot. No kernel changes; eval battery
+# at parity with the frozen baseline (needle exact through 128k).
+# The v0.6.1 base underneath —
 # the memory-truth release: admission charges what a request will
 # actually commit, measured, not feared. Decode credit is a 32k-token
 # tranche instead of a ~393k phantom budget per uncapped request (a
@@ -107,7 +127,7 @@ set -euo pipefail
 # DS4_REPO=antirez/ds4 for the upstream engine without the fork's
 # serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.6.1}"
+DS4_REF="${DS4_REF:-v0.6.2}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
