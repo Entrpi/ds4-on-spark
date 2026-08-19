@@ -342,8 +342,17 @@ clone_and_build() {
                 log "Repointing origin: ${current_url:-<unset>} -> $DS4_REPO"
                 git remote set-url origin "$DS4_REPO"
             fi
-            git fetch --depth 1 origin "$DS4_REF"
-            git reset --hard FETCH_HEAD
+            # Fetch tag refs AS tags: the upgrade path must create
+            # refs/tags/$DS4_REF locally or `git describe` cannot see it
+            # and the version stamp falls back to the committed VERSION
+            # file of whatever the tree last held (the v0.6.2 rehearsal
+            # caught an upgraded build stamping itself v0.6.1).
+            if git fetch --depth 1 origin "refs/tags/$DS4_REF:refs/tags/$DS4_REF" 2>/dev/null; then
+                git reset --hard "refs/tags/$DS4_REF"
+            else
+                git fetch --depth 1 origin "$DS4_REF"
+                git reset --hard FETCH_HEAD
+            fi
         )
     fi
 
