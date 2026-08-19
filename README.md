@@ -94,7 +94,7 @@ want to change:
 
 ```bash
 ds4-serve                              # full stack, ctx 524288, 127.0.0.1:8000
-ds4-serve -c 786432                    # deepest tested context (768K)
+ds4-serve -c 1048576                   # the model's full 1M window
 ds4-serve -c 32768 --host 0.0.0.0      # smaller context, reachable from LAN
 ```
 
@@ -105,8 +105,9 @@ runs in the foreground; supervise with nohup/systemd/tmux as you prefer.
 
 Sizing `-c` stopped being a memory decision in v0.6: unused context is
 demand-mapped, so a deep `-c` costs almost nothing until a request
-actually fills it. The default is 512k and the deepest proven setting
-is `-c 786432`. What each request pays for is its prompt plus its
+actually fills it. The default is 512k; the model's full 1M window
+(`-c 1048576`) is proven with a 975k-token conversation served warm.
+What each request pays for is its prompt plus its
 decode budget (`max_tokens`, assumed 32768 when the client omits it),
 and how many requests can hold context at once is the bank count. Both
 are explained in
