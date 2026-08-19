@@ -1,6 +1,6 @@
 # ds4-on-spark
 
-One command gets **[`Entrpi/ds4`](https://github.com/Entrpi/ds4)** serving
+One command gets **[`Entrpi/ds4`](https://github.com/Entrpi/ds4/tree/batched-serving)** serving
 **DeepSeek-V4-Flash** on your DGX Spark, entirely on-device (GB10 / SM121,
 128 GB unified memory, ~119 GiB usable; RTX PRO 6000 / 5090-class
 `sm_120` also builds). `Entrpi/ds4` is a major-feature fork of
