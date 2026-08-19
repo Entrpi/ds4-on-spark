@@ -13,8 +13,10 @@ Compared to the upstream engine you get **2.4-3.3x the prefill
 throughput**, **1.33-1.47x the decode speed across the full 2k-128k
 context range**, continuous batching, prefix caching with disk-persisted
 KV banks that survive restarts, DSpark lossless speculative decode, and
-since v0.6 a memory governor that held **2.26 million tokens of context
-resident and warm at once** on a single Spark. The
+since v0.6 a memory governor measured up to **3 million tokens of
+active context resident and warm at once** on a single Spark
+(2.26 million with every shipped default intact;
+[recipe and receipts](#reaching-3m-tokens-of-active-context)). The
 [fork delta table](#what-the-fork-adds-over-upstream) itemizes exactly
 what changed and how each claim was measured.
 
@@ -201,7 +203,7 @@ Two decisions cover most operator needs:
 | `DS4_SERVER_CONTINUOUS` | `1` (continuous batching on) | Set to `0` to serve one request at a time on the old serial path. Only worth considering for single-user, latency-critical setups. |
 | `DS4_BATCH_VMM_TRIM` | `1` (reclaim allowed) | When an admission does not fit, the engine may release idle banks' memory to fund it; the reclaimed conversation then needs a disk restore or re-prefill when it returns. Set to `0` to forbid that: resident context is never sacrificed, and the admission is refused instead. |
 
-The proving run for this release booted zero-config at `-c 786432` and
+The shipped-defaults proving run booted zero-config at `-c 786432` and
 admitted three ingestions of about 755 thousand tokens each, back to
 back: **2.26 million tokens of context resident and warm at once**,
 zero refusals, the 4 GiB floor intact. A fourth deep ingestion was
