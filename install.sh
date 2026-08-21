@@ -117,17 +117,24 @@ set -euo pipefail
 # routing is the default; setting DS4_SERVER_CONT_ANTHROPIC=0,
 # DS4_SERVER_CONT_RESPONSES=0, DS4_SERVER_CONT_TOOLS_ANTHROPIC=0 or
 # DS4_SERVER_CONT_TOOLS_RESPONSES=0 restores the old serial routing
-# per surface for one release only. Perf at parity with v0.5.5 (ABBA
-# within noise at N=1/8/16; serving semantics pinned by unit oracles):
-# the standing records and charts stand. Full release battery green on
-# the tagged tree, including the 240k deep-serving gate (now run at
-# shipped defaults, no tuned environment), the tool-eval suite
-# (83/100/86/84, byte-identical to v0.5.5), and cross-box golden
-# logprob vectors at zero deviation. Set DS4_REF=main +
+# per surface for one release only. Perf at parity (no kernel-perf
+# change in the swept bands; the standing records and charts stand).
+# v0.6.3 qualifies the full 1M window to the last token (deepest
+# proven 1,029,340 prompt tokens, needle exact at 99.9% depth), adds
+# typed refusals for response_format and for over-deep whole-prompt
+# probe forwards, decodes chunked request bodies, makes the thinking
+# dial observable on every serving line, and picks best-fit trim
+# victims under memory pressure. Full release battery green on the
+# tagged tree: the 240k deep-serving gate at shipped defaults, the
+# frozen eval suite at quality parity (needle retrieval perfect at
+# every depth, code suites exact), the tool-eval suite at 83/100/82/80
+# on this kernel lineage (a temp-0 trajectory sensitivity is disclosed
+# in the CHANGELOG), and golden logprob vectors at zero deviation on
+# the release build. Set DS4_REF=main +
 # DS4_REPO=antirez/ds4 for the upstream engine without the fork's
 # serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.6.2}"
+DS4_REF="${DS4_REF:-v0.6.3}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 

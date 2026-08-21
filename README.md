@@ -21,7 +21,7 @@ active context resident and warm at once** on a single Spark
 what changed and how each claim was measured.
 
 **Status:** working end-to-end, pinned to fork release
-[**`v0.6.2`**](https://github.com/Entrpi/ds4/blob/v0.6.2/CHANGELOG.md),
+[**`v0.6.3`**](https://github.com/Entrpi/ds4/blob/v0.6.3/CHANGELOG.md),
 the real-budgets release. The engine keeps a single account of its
 memory and makes every decision from it: requests are charged what they
 will actually use, every floor and margin in the plan is derived from a
@@ -34,11 +34,11 @@ raw memory drop against the ledger and logs the residual. The default
 launch context is 512k. The details and every knob are in
 [Memory and context](#memory-and-context-the-knobs-that-matter); the
 per-release story is in the fork
-[CHANGELOG](https://github.com/Entrpi/ds4/blob/v0.6.2/CHANGELOG.md).
+[CHANGELOG](https://github.com/Entrpi/ds4/blob/v0.6.3/CHANGELOG.md).
 
 The pieces:
 
-- **Engine:** [`Entrpi/ds4`](https://github.com/Entrpi/ds4) pinned at `v0.6.2`, cloned and built native `sm_121` by the installer.
+- **Engine:** [`Entrpi/ds4`](https://github.com/Entrpi/ds4) pinned at `v0.6.3`, cloned and built native `sm_121` by the installer.
 - **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf), the DeepSeek-V4-Flash-**0731** ~81 GiB asymmetric quant (IQ2_XXS routed gate/up, Q2_K routed down, Q8_0 everything else dense, F16 compressor/indexer; FP8 in ds4 is a runtime KV-cache format, not a stored weight format), plus the ~6.5 GiB DSpark drafter from [`bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF`](https://huggingface.co/bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF). The 0731 checkpoint has no MTP head; DSpark is the only speculation.
 - **Hardware:** NVIDIA DGX Spark (GB10, SM121, 128 GB LPDDR5X unified). See [Hardware requirements](#hardware-requirements).
 
@@ -54,7 +54,7 @@ That one command:
 
 1. Verifies the host (aarch64, GB10/SM121, CUDA 13, ≥120 GiB free disk).
 2. Clones the `Entrpi/ds4` fork at the pinned release tag (currently
-   **`v0.6.2`**) into `~/code/ds4` (or `$DS4_SRC_DIR`).
+   **`v0.6.3`**) into `~/code/ds4` (or `$DS4_SRC_DIR`).
 3. Builds `ds4`, `ds4-server`, `ds4-bench` with `CUDA_ARCH=sm_121` in ~8 s.
 4. Downloads the DeepSeek-V4-Flash-**0731** Q2 GGUF (~81 GiB) from
    [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf)
@@ -106,7 +106,9 @@ runs in the foreground; supervise with nohup/systemd/tmux as you prefer.
 Sizing `-c` stopped being a memory decision in v0.6: unused context is
 demand-mapped, so a deep `-c` costs almost nothing until a request
 actually fills it. The default is 512k; the model's full 1M window
-(`-c 1048576`) is proven with a 975k-token conversation served warm.
+(`-c 1048576`) is qualified to the last token (deepest proven: a
+1,029,340-token prompt with the needle at 99.9% depth retrieved
+exactly).
 What each request pays for is its prompt plus its
 decode budget (`max_tokens`, assumed 32768 when the client omits it),
 and how many requests can hold context at once is the bank count. Both
@@ -194,7 +196,7 @@ Two decisions cover most operator needs:
 
 | Knob | Default | What it does and when to change it |
 |---|---|---|
-| `-c` / `--ctx` | `524288` via `ds4-serve` (the bare CUDA engine defaults to `262144`) | The per-request context ceiling. Each request must fit its prompt plus its decode budget under this, or it gets a typed 400. Raise it for deeper documents (a 975k-token conversation at `-c 1048576` is the deepest proven); unused context is demand-mapped, so a deep ceiling costs almost nothing until a request fills it. |
+| `-c` / `--ctx` | `524288` via `ds4-serve` (the bare CUDA engine defaults to `262144`) | The per-request context ceiling. Each request must fit its prompt plus its decode budget under this, or it gets a typed 400. Raise it for deeper documents (a 1,029,340-token prompt at `-c 1048576` is the deepest proven); unused context is demand-mapped, so a deep ceiling costs almost nothing until a request fills it. |
 | `DS4_SERVER_COALESCE_MAX` | unset: sized from the live memory budget at boot — 32 through 16k context (the measured regime); above that, as many full-depth-fundable banks as the budget covers (floor 4, cap 32), priced at the same per-token rate admissions are charged. The boot ledger prints the arithmetic (`kv plan` line). Where no memory answer exists (Metal/CPU), a static halving ladder rules instead. | How many requests can hold warm context at once (the bank count). Set it (1..64) to override — an explicit value also disarms the budget sizing, so your number rules (e.g. more, shallower banks for high-concurrency batch work). Boot may still reduce the count to fit memory, never raise it, and it is fixed until restart. A request beyond the bank count evicts the least-recently-used idle bank. |
 | `--mem-floor-gb` (env `DS4_MEM_FLOOR_GB`) | `4` | The engine never admits work that would leave the system under this many GiB of free memory: it reclaims idle cache first and refuses with a typed error if that is not enough. Lower it (down to 1) on a dedicated serving box to fund more context; raise it on a machine you also work on. |
 | `max_tokens` (request field, not a flag) | `32768` assumed when the client omits it | The decode budget a request is charged at admission, on top of its prompt. Agents that omit it are charged the full 32768, so set it explicitly when a deep prompt must fit: prompt + `max_tokens` must stay under `-c`. An oversized value is clamped and reported as `length`, never an error. |
