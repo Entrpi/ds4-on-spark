@@ -183,9 +183,11 @@ ds4-serve --reasoning-replay drop --tool-slip-resample
 
 Two things go wrong specifically in deep OpenAI-style agent loops on
 quantized weights, and v0.6.4 added a knob for each. Most scaffolds echo
-`reasoning_content` back every turn; `--reasoning-replay drop` renders it
-out of the prompt (what llama.cpp and DeepSeek's API do), keeping the
-conversation 16-28% shallower and out of the depth band where tool-call
+`reasoning_content` back every turn, which is what DeepSeek's reference
+format specifies for tool loops; `--reasoning-replay drop` renders the
+echo out of the prompt anyway (llama.cpp's default behavior, a deliberate
+deviation from the reference format), keeping the conversation 16-28%
+shallower and out of the depth band where the low-bit quant's tool-call
 adherence degrades. `--tool-slip-resample` retries a turn once, before the
 client sees it, when a tools-armed request comes back with prose instead
 of a tool call — the failure mode that makes agent harnesses abandon a

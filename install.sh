@@ -137,7 +137,9 @@ set -euo pipefail
 # calling; --reasoning-effort-native restores the native tiers), the
 # tool-call parser accepts mixed tag spellings, --reasoning-replay drop
 # renders scaffold-echoed reasoning_content out of the prompt (16-28%
-# shallower conversations, llama.cpp/DeepSeek-API parity), and
+# shallower conversations; llama.cpp's default behavior, a deliberate
+# deviation from DeepSeek's reference format that helps low-bit quants
+# at depth), and
 # --tool-slip-resample retries a tools-armed turn once when it settles
 # as prose instead of a tool call. On the SWE-rebench instance that
 # reproduced the field report, drop+resample turned three dead runs
