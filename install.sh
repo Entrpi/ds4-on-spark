@@ -130,11 +130,26 @@ set -euo pipefail
 # every depth, code suites exact), the tool-eval suite at 83/100/82/80
 # on this kernel lineage (a temp-0 trajectory sensitivity is disclosed
 # in the CHANGELOG), and golden logprob vectors at zero deviation on
-# the release build. Set DS4_REF=main +
+# the release build.
+# v0.6.3.1 + v0.6.4 close the field-reported agent-harness gap: client
+# reasoning_effort fields compat-map to the prefix-free level (the
+# checkpoint's injected effort preamble measurably degrades deep tool
+# calling; --reasoning-effort-native restores the native tiers), the
+# tool-call parser accepts mixed tag spellings, --reasoning-replay drop
+# renders scaffold-echoed reasoning_content out of the prompt (16-28%
+# shallower conversations, llama.cpp/DeepSeek-API parity), and
+# --tool-slip-resample retries a tools-armed turn once when it settles
+# as prose instead of a tool call. On the SWE-rebench instance that
+# reproduced the field report, drop+resample turned three dead runs
+# into a submitted, harness-graded resolved task, identical to
+# llama.cpp on the same scaffold. Battery green on the tagged tree,
+# including the tool-call depth gate to 112K in both knob positions
+# and the tool-eval suite unchanged at 83/100/82/80.
+# Set DS4_REF=main +
 # DS4_REPO=antirez/ds4 for the upstream engine without the fork's
 # serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.6.3}"
+DS4_REF="${DS4_REF:-v0.6.4}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 
