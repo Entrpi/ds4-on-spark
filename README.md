@@ -28,10 +28,11 @@ reminder by default (the measured fix for agent tasks dying to prose
 turns at depth), and two optional levers render scaffold-echoed
 reasoning out of the prompt or resample a prose turn once (see
 [Long agent loops](#long-agent-loops-defaults-and-levers-ds4-v065)).
-The v0.6 memory-truth line stands underneath: the engine keeps a single account of its
-memory and makes every decision from it: requests are charged what they
-will actually use, every floor and margin in the plan is derived from a
-measurement rather than a constant, idle memory returns to the pool
+The v0.6 memory-truth line stands underneath. The engine keeps a single
+account of its memory and makes every decision from it: requests are
+charged what they will actually use, every floor and margin in the plan
+is derived from a measurement rather than a constant, idle memory
+returns to the pool
 after a couple of minutes of quiet, and when something truly does not
 fit you get a clear refusal that says how many bytes were missing and
 whether retrying will help, never a crash. While serving, the engine
@@ -429,11 +430,12 @@ GGUF (upstream decode measured flat May → July 2026):
 | **Speculation** | DSpark lossless block drafter (3-layer target-fused, Q2K) + terminal yield-quench (net-positive per request, default on); armed at every depth since v0.4.0 — no kv-depth gate; break-even guard recalibrated per model identity (v0.5.0: 2.16 for 0731) | upstream MTP was single-token, net-negative single-stream — and the 0731 checkpoint retired it entirely (DSpark is the only speculation); fork code-corpus band **1.10×** its own plain decode, adversarial prose 1.04× (typical quench floor 0.95–0.97×, bounded learning debt); the vs-upstream win is the headline |
 | **Serving** | Continuous batching (mid-flight admit/evict, chunked prefill interleave), per-bank warm start (~7× TTFT on shared prefixes), fork-by-copy fanout, durable disk-persisted KV banks (v0.3.0), OpenAI + Anthropic-shape APIs | upstream serves one stream; fork aggregate **59 tok/s at 12 concurrent requests** (v0.5.0, [chart](docs/v050_conc_throughput.svg)) |
 | **Thinking-mode turns** | Thinking conversations reuse KV on the continuous path and persist to the disk tier (v0.4.2, community fix by [@fabiopili](https://github.com/fabiopili), [PR #4](https://github.com/Entrpi/ds4/pull/4)) | turn-2 TTFT **53.9 s → 0.69 s** on a 29k-token thinking preamble (full re-prefill pre-fix vs `fork admit cached=32792`; DGX Spark, ctx 49152, 2026-07-24 stamp) |
+| **Agent robustness** | Client `reasoning_effort` compat-mapped away from the checkpoint's injected effort preambles (v0.6.3.1); deep tool results carry a protocol reminder by default (v0.6.5); opt-in levers to drop scaffold-echoed reasoning or resample a prose turn once (v0.6.4) | a field-reported SWE-rebench agent task that died three ways on the old line now **submits and harness-resolves at stock defaults**; 0/72 vs 6/72 tool-protocol slips at the captured failure states |
 | **Ops** | Resident weight server (VMM-backed, IPC manifest) — engines import the 81 GiB model in seconds instead of multi-minute reloads; builds the aligned repack artifacts the fast kernels read in place | upstream reloads per process |
 | **Telemetry** | Per-step speculative trace + offline policy replayer (`tools/dspark_trace_replay.py`), quench/gate/profile counters | — |
 
 Every fork-side change is documented in the fork
-[`CHANGELOG.md`](https://github.com/Entrpi/ds4/blob/v0.5.0/CHANGELOG.md);
+[`CHANGELOG.md`](https://github.com/Entrpi/ds4/blob/v0.6.5/CHANGELOG.md);
 the [roofline analysis](#roofline-why-speculation-and-batching-are-the-levers)
 below explains why these are the changes that matter on this hardware.
 
