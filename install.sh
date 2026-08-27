@@ -147,11 +147,18 @@ set -euo pipefail
 # llama.cpp on the same scaffold. Battery green on the tagged tree,
 # including the tool-call depth gate to 112K in both knob positions
 # and the tool-eval suite unchanged at 83/100/82/80.
+# v0.6.5 makes the fix a default: past ~30K tokens of conversation,
+# every tool result in a tools-armed chat carries a short protocol
+# reminder (--tool-call-reminder off disables). At the exact captured
+# failure states it measured 0/72 slips vs 6/72 without, and the
+# failing agent task resolved in 57 calls with zero slips, reasoning
+# traces kept. Shallow chat-with-tools flows are never touched, and
+# warm prefix reuse is unchanged. Tool-eval suite still 83/100/82/80.
 # Set DS4_REF=main +
 # DS4_REPO=antirez/ds4 for the upstream engine without the fork's
 # serving stack.
 DS4_REPO="${DS4_REPO:-https://github.com/Entrpi/ds4.git}"
-DS4_REF="${DS4_REF:-v0.6.4}"
+DS4_REF="${DS4_REF:-v0.6.5}"
 DS4_SRC_DIR="${DS4_SRC_DIR:-$HOME/code/ds4}"
 DS4_GGUF_DIR="${DS4_GGUF_DIR:-$HOME/gguf}"
 

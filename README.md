@@ -21,12 +21,13 @@ active context resident and warm at once** on a single Spark
 what changed and how each claim was measured.
 
 **Status:** working end-to-end, pinned to fork release
-[**`v0.6.4`**](https://github.com/Entrpi/ds4/blob/v0.6.4/CHANGELOG.md),
-the agent-robustness release: client `reasoning_effort` fields
-compat-map to the prefix-free level, scaffold-echoed reasoning can be
-rendered out of the prompt, and a tools-armed turn that settles as
-prose can be resampled once before the client sees it (see
-[Recommended flags for long agent loops](#recommended-flags-for-long-agent-loops-ds4-v064)).
+[**`v0.6.5`**](https://github.com/Entrpi/ds4/blob/v0.6.5/CHANGELOG.md),
+the agent-robustness line: client `reasoning_effort` fields compat-map
+to the prefix-free level, deep tool conversations carry a protocol
+reminder by default (the measured fix for agent tasks dying to prose
+turns at depth), and two optional levers render scaffold-echoed
+reasoning out of the prompt or resample a prose turn once (see
+[Long agent loops](#long-agent-loops-defaults-and-levers-ds4-v065)).
 The v0.6 memory-truth line stands underneath: the engine keeps a single account of its
 memory and makes every decision from it: requests are charged what they
 will actually use, every floor and margin in the plan is derived from a
@@ -39,11 +40,11 @@ raw memory drop against the ledger and logs the residual. The default
 launch context is 512k. The details and every knob are in
 [Memory and context](#memory-and-context-the-knobs-that-matter); the
 per-release story is in the fork
-[CHANGELOG](https://github.com/Entrpi/ds4/blob/v0.6.4/CHANGELOG.md).
+[CHANGELOG](https://github.com/Entrpi/ds4/blob/v0.6.5/CHANGELOG.md).
 
 The pieces:
 
-- **Engine:** [`Entrpi/ds4`](https://github.com/Entrpi/ds4) pinned at `v0.6.4`, cloned and built native `sm_121` by the installer.
+- **Engine:** [`Entrpi/ds4`](https://github.com/Entrpi/ds4) pinned at `v0.6.5`, cloned and built native `sm_121` by the installer.
 - **Model:** [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf), the DeepSeek-V4-Flash-**0731** ~81 GiB asymmetric quant (IQ2_XXS routed gate/up, Q2_K routed down, Q8_0 everything else dense, F16 compressor/indexer; FP8 in ds4 is a runtime KV-cache format, not a stored weight format), plus the ~6.5 GiB DSpark drafter from [`bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF`](https://huggingface.co/bleysg/DeepSeek-V4-Flash-DSpark-drafter-GGUF). The 0731 checkpoint has no MTP head; DSpark is the only speculation.
 - **Hardware:** NVIDIA DGX Spark (GB10, SM121, 128 GB LPDDR5X unified). See [Hardware requirements](#hardware-requirements).
 
@@ -59,7 +60,7 @@ That one command:
 
 1. Verifies the host (aarch64, GB10/SM121, CUDA 13, ≥120 GiB free disk).
 2. Clones the `Entrpi/ds4` fork at the pinned release tag (currently
-   **`v0.6.4`**) into `~/code/ds4` (or `$DS4_SRC_DIR`).
+   **`v0.6.5`**) into `~/code/ds4` (or `$DS4_SRC_DIR`).
 3. Builds `ds4`, `ds4-server`, `ds4-bench` with `CUDA_ARCH=sm_121` in ~8 s.
 4. Downloads the DeepSeek-V4-Flash-**0731** Q2 GGUF (~81 GiB) from
    [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf)
@@ -175,24 +176,33 @@ for opencode and Pi, are in the engine README's
 [Agent Client Usage](https://github.com/Entrpi/ds4#agent-client-usage)
 section.
 
-### Recommended flags for long agent loops (ds4 v0.6.4+)
+### Long agent loops: defaults and levers (ds4 v0.6.5+)
+
+Since v0.6.5 the main fix is on by default: past roughly 30K tokens of
+conversation, every tool result in a tools-armed chat carries a short
+protocol reminder. At depth, low-bit quants otherwise answer some
+tools-armed turns with a prose completion report instead of a tool call,
+and agent harnesses abandon tasks over it; the reminder measured 0/72
+slips vs 6/72 without at the exact captured failure states and took the
+failing SWE-rebench task from three dead runs to resolved. Shallow
+chat-with-tools flows never see it, and `--tool-call-reminder off`
+disables it.
+
+Two optional levers remain for quantized agent serving:
 
 ```sh
 ds4-serve --reasoning-replay drop --tool-slip-resample
 ```
 
-Two things go wrong specifically in deep OpenAI-style agent loops on
-quantized weights, and v0.6.4 added a knob for each. Most scaffolds echo
-`reasoning_content` back every turn, which is what DeepSeek's reference
-format specifies for tool loops; `--reasoning-replay drop` renders the
-echo out of the prompt anyway (llama.cpp's default behavior, a deliberate
-deviation from the reference format), keeping the conversation 16-28%
-shallower and out of the depth band where the low-bit quant's tool-call
-adherence degrades. `--tool-slip-resample` retries a turn once, before the
-client sees it, when a tools-armed request comes back with prose instead
-of a tool call — the failure mode that makes agent harnesses abandon a
-task. Both are off by default; details and measurements are in the engine
-README's Server section and the v0.6.4 changelog.
+Most scaffolds echo `reasoning_content` back every turn, which is what
+DeepSeek's reference format specifies for tool loops; `--reasoning-replay
+drop` renders the echo out of the prompt anyway (llama.cpp's default
+behavior, a deliberate deviation from the reference format), keeping the
+conversation 16-28% shallower. `--tool-slip-resample` retries a turn
+once, before the client sees it, when a tools-armed request still comes
+back with prose. Both off by default; details and measurements are in
+the engine README's Server section and the v0.6.4/v0.6.5 changelog
+entries.
 
 ## Memory and context: the knobs that matter
 
